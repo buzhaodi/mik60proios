@@ -35,7 +35,14 @@ fi
 # Remove them first so earlier independent patches retain their idempotent checks.
 # The same holds for the boot-time GPU addon mount and the staged system apps copy (zzy), which edit the owner Data mount function
 # inside the systemos patch. Reverse newest first; the loop below re-applies them in name order.
-for LATE_PATCH in "$ROOT/patches/xnu/zzz-boot-progress.patch" "$ROOT/patches/xnu/zzy-staged-system-apps.patch" \
+# socrates: the loop's glob order must follow the upstream series order (zzy-gpu, zzy-staged,
+# zzyb, zzyc, zzz). The default locale collation ignores the hyphen and would sort zzyb/zzyc
+# BEFORE zzy-native-gpu - the very patch whose context they are written against - so force
+# byte order with LC_ALL=C. zzyb and zzyc (upstream additions after the vermeer era) join the
+# pre-reversal so a re-run on a patched tree stays idempotent.
+export LC_ALL=C
+for LATE_PATCH in "$ROOT/patches/xnu/zzz-boot-progress.patch" "$ROOT/patches/xnu/zzyc-owner-skip-launch-constraints.patch" \
+    "$ROOT/patches/xnu/zzyb-native-cryptex-os-view.patch" "$ROOT/patches/xnu/zzy-staged-system-apps.patch" \
     "$ROOT/patches/xnu/zzy-native-gpu-addon-mount.patch"; do
   if git -C .cache/xnu-work apply --reverse --check "$LATE_PATCH" >/dev/null 2>&1; then
     git -C .cache/xnu-work apply --reverse "$LATE_PATCH"
