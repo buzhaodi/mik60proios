@@ -275,9 +275,17 @@ unique_chip_id = "required"          # the platform seed is not stored in any re
 # The stock ABL powers the panel off when the device tree has no splash region. Measured from
 # the socrates dtbo overlay (entry 50): splash_region 0xb8000000 + 0x2b00000, the same window
 # as the stock uefiplat.cfg's "Display Reserved" - and the same values sheng and vermeer carry.
-[[bootimg.dtb_node]]
-path = "/reserved-memory/splash_region"
-props = [
-  { name = "label", type = "s", value = "cont_splash_region" },
-  { name = "reg", type = "x", value = ["0x0", "0xb8000000", "0x0", "0x2b00000"] },
-]
+#
+# socrates: the boot image appends the WHOLE vendor_boot DTB table (8 blocks, msm-id
+# 0x25c/0x258/0x207/0x25b/0x259/0x218) so the ABL finds its SoC block the way the stock
+# image does - the first boot with a single "Kalama QCM" block never left the bootloader
+# (the ABL's SoC/board match is hard on chip_id & 0xffff, and the dtbo overlay merge then
+# fails silently). fdtput rewrites only the FIRST block of a concatenated blob, so the
+# splash node is injected offline into EVERY block by tools/inject-splash.sh and the
+# [[bootimg.dtb_node]] section here stays empty (patch_dtb would truncate the table).
+# [[bootimg.dtb_node]]
+# path = "/reserved-memory/splash_region"
+# props = [
+#   { name = "label", type = "s", value = "cont_splash_region" },
+#   { name = "reg", type = "x", value = ["0x0", "0xb8000000", "0x0", "0x2b00000"] },
+# ]
