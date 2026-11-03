@@ -56,7 +56,7 @@ archives = [
   "build-corecrypto-14.py --namespace",
   "build-arm-driver.py ArmDTPlatform",
   "build-arm-driver.py ArmCpu",
-  "component:SoftwareAES",
+  "build-arm-driver.py SoftwareAES",
   "build-software-aes-bindings.py",
   "build-arm-driver.py NativeUfs",
   "build-mockfs-fixture.py",
