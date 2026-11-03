@@ -128,7 +128,10 @@ dsc = "Platforms/Xiaomi/socratesPkg/socrates.dsc"
 fd = "Build/socratesPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
 preflight = ["scripts/check-socrates.py"]
 submodules = ["Common/Mu", "Common/Mu_OEM_Sample", "Silicium-ACPI", "Silicon/Silicium/OpensslPkg/Library/OpensslLib/openssl"]
-patches = ["Resources/MuPatches/Gic-Spurious.patch"]
+# No MuPatches: the Gic-Spurious masking (IPCC INTID 0x105, level interrupt without a
+# handler would re-fire and starve the CPU) is already carried by the pinned
+# mu_basecore revision the feeds fetch - applying the vermeer-era patch on top of it
+# fails its context check.
 packages = [
   "{uefi}",
   "{uefi}/Platforms/Xiaomi",
