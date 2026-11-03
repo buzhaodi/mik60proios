@@ -1,0 +1,266 @@
+# Board description of the Redmi K70 (vermeer, SM8550), read by the unixnu build driver.
+# Ported from the proven sheng (Xiaomi Pad 6S Pro) board: same SM8550 SoC, same stock UEFI
+# memory windows (uefiplat.cfg of the K70 OS1.0.x firmware confirms: UEFI FD 0xA7000000,
+# stack 0xA760D000, Display Reserved 0xB8000000+0x2B00000, identical register map).
+
+[board]
+name = "vermeer"
+soc = "SM8550"
+description = "Redmi K70"
+kit = "vermeer"                    # the package/ of this repository appears as kits/vermeer in the build tree
+
+# The target OS image: the unchanged iPad7,1 iPadOS 17.7.11 restore image, identical to sheng
+# (the whole qualified chain - prelink roots, trust caches, kernel args - targets this build).
+[ipsw]
+url = "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw"
+product = "iPad7,1"
+version = "17.7.11"
+build = "21H461"
+device_class = "j120ap"
+chip_id = 0x8011
+board_id = 12
+fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache"]
+
+[ipsw.sha256]
+"044-76040-038.dmg" = "3f99b859c9728379110b66657c7b15285bcb1925ad8b5726542e2cdcf8b1028d"
+"044-76034-038.dmg" = "b4908cde41d23e6bc05e6af51a2c9eeb00cf0f863a6a18b1600c96a3fd70414f"
+
+# The raw image for the userdata partition. TODO: replace with the GPT entry "userdata" of
+# LUN 0 read from this K70 (fastboot: `fastboot oem get-partition-info userdata` or a GPT dump).
+[userdata]
+first_lba = 0x2f3840
+last_lba = 0x3d0abfa
+lba_bytes = 4096
+windows = [
+  { name = "OS", component = "OS" },
+  { name = "SystemOS", component = "Cryptex1,SystemOS" },
+]
+
+[kernel]
+defconfig = "vermeer_defconfig"
+# Archive builders of the kernel step, in order (SoC-level components, as sheng).
+# The VirtIO block/ram-block builders and their storage-binding post-processing are absent:
+# build-native-virtio-bindings.py reads build/storage-abi/interface-audit.json, which is
+# recorded from a live-device GDB observation and is not reproducible in a clean checkout.
+archives = [
+  "build-corecrypto-14.py",
+  "build-corecrypto-14.py --namespace",
+  "build-arm-driver.py ArmDTPlatform",
+  "build-arm-driver.py ArmCpu",
+  "build-arm-driver.py NativeAES",
+  "build-native-aes-bindings.py",
+  "build-arm-driver.py NativeUfs",
+  "build-mockfs-fixture.py",
+  "build-libpthread-kernel.py",
+]
+# Omitted on purpose, unlike sheng:
+#   build-sheng-platform-power.py   verify-proofs against a native-owner-ufs-*-candidate macho that only a
+#                                   live-device GDB session produces (CONFIG_XNU_SHENG_PMGR is off here).
+#   build-native-legacy-display.py  same dependency through audit-mobile-graphics-legacy.py
+#                                   (CONFIG_XNU_NATIVE_LEGACY_DISPLAY is off here).
+#   build-arm-driver.py NativeAdreno and the two Adreno kit builders
+#                                   NativeAdrenoService.cpp only compiles clean with -Werror when
+#                                   build/sheng-gmu/ShengGmuSource.h exists, and that header is generated
+#                                   by prepare-sheng-gmu.py from the SHA-pinned Linux a6xx sources plus the
+#                                   sheng compiled DTS. Neither is in a clean checkout, and the K70 GPU is a
+#                                   different instance (GMU 0x3d68000 vs 0x3d6a000, see GPU-PORT.md), so the
+#                                   sheng register set cannot be reused blindly. CONFIG_XNU_NATIVE_ADRENO is
+#                                   off until the vermeer GPU inputs are qualified on hardware.
+# Disabling a feature here means its symbols are not referenced by the kernel and its archive is not a
+# link input. Re-adding a builder means first recording the evidence it verifies on hardware.
+
+[kernel.prelink]
+tool = "kits/NativePrelink/emit_prelink.py"
+kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
+kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7"
+slide = "-0x1000000"
+early_security_init = "com.apple.driver.AppleMobileFileIntegrity=0xfffffff005ab4ae0"
+roots = [
+  "com.apple.AppleFSCompression.AppleFSCompressionTypeZlib",
+  "com.apple.driver.AppleARMPlatform",
+  "com.apple.driver.AppleARMWatchdogTimer",
+  "com.apple.driver.AppleAudioClockLibs",
+  "com.apple.driver.AppleEffaceableStorage",
+  "com.apple.driver.AppleIISController",
+  "com.apple.driver.AppleM2ScalerCSCDriver",
+  "com.apple.driver.AppleMobileFileIntegrity",
+  "com.apple.driver.ApplePMGR",
+  "com.apple.driver.IODARTFamily",
+  "com.apple.filesystems.apfs",
+  "com.apple.iokit.CoreAnalyticsFamily",
+  "com.apple.iokit.IOAVFamily",
+  "com.apple.iokit.IOAudio2Family",
+  "com.apple.iokit.IOCECFamily",
+  "com.apple.iokit.IOCryptoAcceleratorFamily",
+  "com.apple.iokit.IOGPUFamily",
+  "com.apple.iokit.IOHDCPFamily",
+  "com.apple.iokit.IOMobileGraphicsFamily",
+  "com.apple.iokit.IOReportFamily",
+  "com.apple.iokit.IOSlowAdaptiveClockingFamily",
+  "com.apple.iokit.IOStorageFamily",
+  "com.apple.iokit.IOSurface",
+  "com.apple.kec.Libm",
+  "com.apple.kec.corecrypto",
+  "com.apple.kext.AppleMatch",
+  "com.apple.kext.CoreTrust",
+  "com.apple.security.AppleImage4",
+  "com.apple.security.sandbox",
+  "com.apple.iokit.IOHIDFamily",
+  "com.apple.iokit.IOHIDEventDriver",
+]
+
+[firmware]
+config = "vermeer"                 # Resources/Configs/vermeer.toml in the Mu-Silicium checkout (--uefi)
+dsc = "Platforms/Xiaomi/vermeerPkg/vermeer.dsc"
+fd = "Build/vermeerPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
+preflight = ["scripts/check-vermeer.py"]
+submodules = ["Common/Mu", "Common/Mu_OEM_Sample", "Silicium-ACPI", "Silicon/Silicium/OpensslPkg/Library/OpensslLib/openssl"]
+patches = ["Resources/MuPatches/Gic-Spurious.patch"]
+packages = [
+  "{uefi}",
+  "{uefi}/Platforms/Xiaomi",
+  "{tree}/package",
+  "{tree}/drivers/DarwinBoot",
+  "{edk2}",
+  "{uefi}/Common/Mu",
+  "{uefi}/Common/Mu_OEM_Sample",
+  "{uefi}/Silicon/Qualcomm",
+  "{uefi}/Silicon/Silicium",
+  "{uefi}/Silicium-ACPI",
+  "{uefi}/Silicium-ACPI/Platforms/Xiaomi",
+  "{uefi}/Silicium-ACPI/Silicon/Qualcomm",
+]
+
+[firmware.defines]
+ENABLE_SECUREBOOT = "1"
+DEVICE_MODEL = "vermeer"
+MEMORY_PROTECTION = "TRUE"
+SHIP_MODE = "FALSE"
+BUILDID_STRING = "vermeer-research"
+
+[payload]
+volume = "VERMEERESP"
+# 64 MiB, not 192: `fastboot boot` downloads the whole boot image into a buffer the
+# stock ABL allocates before it starts, and 198 MB of it is refused part-way through
+# the transfer ("Device sent unknown status code"). The volume really holds the
+# prelinked kernel (about 52 MiB) plus the ADT and the trust cache, so 64 MiB is the
+# size the first boot needs. Raise it only together with a storage stage that adds
+# images, and re-check that `fastboot boot` still accepts the result.
+size_mib = 64
+# The RAM-root entry ("build payload --userland FILE") carries a filesystem next to the kernel, so it
+# may ask for its own ceiling. With userland/userland.img - one static Mach-O plus a second file, a few
+# hundred KiB - the kernel is still the only large thing in the volume, so 64 MiB is enough for both
+# entries. Raise this only for an image that also carries an OS volume.
+size_mib_userland = 64
+userland_title = "vermeer userland: boot to the first EL0 process (rd=md0)"
+# The countdown boots the RAM root with this minimal line; the full bring-up line below stays
+# available as the "userland-full" menu entry. Reason: the full line enables dozens of hardware
+# probes (sheng-*, offline-*, armcpu-*), and on this board the kernel dies with
+#   ASSERT [ArmCpuDxe] CpuExceptionHandlerLib.c(438): ((BOOLEAN)(0==1))
+#   Synchronous exception ... ESR: EC 0x25 IL 0x1 ISS 0x00000010
+# i.e. a same-EL data abort whose DFSC is "synchronous external abort" - an MMIO access nothing
+# answered. ELR was not the kernel entry (it would imply a non-4K-aligned load base), so XNU ran a
+# while and then touched hardware. With the probes off, reaching the first EL0 process separates
+# "the board cannot take these probes" from "the RAM root itself does not mount".
+userland_args = [
+  "-v",
+  "serial=3",
+  "debug=0x14e",
+  "kt_fixed_zones=120",
+]
+loader = "firmware"
+title = "vermeer first boot: source 4K XNU to console"
+dram_size = "0x80000000"             # conservative first-boot window, as sheng
+skip_setup_tool = "scripts/seed-data-skip-setup.py"   # used by --skip-setup
+panic_screen = true
+trust_cache_sha256 = [
+  "7416ca4f8377146626bb284e2133c76bee6cb4e3ee0af5d648b186235a7323a7",
+  "8900d6a93d7a59ce1a872a5c081e559f4240a218f97e12d44d22dda46644d68f",
+]
+kernel_args = [
+  "-v",
+  "serial=3",
+  "debug=0x14e",
+  "kt_fixed_zones=120",
+  "offline-legacy-register=1",
+  "offline-legacy-gop=1",
+  "offline-legacy-unit-scale=2",
+  "offline-legacy-pm=1",
+  "offline-legacy-validate=1",
+  "offline-legacy-transfer=1",
+  "offline-legacy-cpu-present=1",
+  "offline-hid-home=1",
+  "offline-hid-input=1",
+  "offline-legacy-phase=4",
+  "offline-mobile-graphics-client=1",
+  "offline-mobile-graphics-load=1",
+  "offline-apfs-load=1",
+  "boot-progress=2",
+  "-apfs_shared_datavolume",
+  "offline-key-events=1",
+  # Not with the bring-up profile: payload.py refuses native-ufs-root unless the kernel
+  # defines _sheng_pmgr_run (and sheng-pmgr=2 is present), because the unchanged target
+  # AMFI panics with "No PMGR" when a UFS root is announced without the PMGR integration.
+  # CONFIG_XNU_NATIVE_UFS and CONFIG_XNU_SHENG_PMGR are both off here, so the UFS root
+  # argument has to go with them. Restore all three together once the storage observation
+  # and the PMGR verify-proofs exist for this board.
+  # "native-ufs-root=1",
+  # "sheng-pmgr=2",
+  "armcpu-diagnostics=1",
+  "sheng-disable-watchdogd=1",
+  "sheng-disable-jobs=com.apple.identityservicesd,com.apple.locationd,com.apple.CommCenter,com.apple.bluetoothd",
+  "boot-ui-focus3=Preferences",
+  "boot-ui-focus4=SpringBoard",
+  "sheng-smp=1",
+  "sheng-cpufreq=3",
+  "sheng-touch=0",
+  "sheng-aks=1",
+  "sheng-gpu-power=9",
+  "sheng-gpu-metal=1",
+  "sheng-fb-gpu=1",
+  "sheng-banner=0",
+  "sheng-gpu-perf=8",
+  "sheng-gpu-addon=1",
+  "armcpu-spi-ipi=1",
+  "-no_slto_panic",
+  "ml-timeout-lock-panic-scale=40",
+  "sheng-touch-hid=1",
+  # 1, not 2: 2 opens the Data store window for writes below the log reserve.
+  # With CONFIG_XNU_NATIVE_UFS = n there is no store to write, and the bring-up
+  # profile must stay physically unable to touch userdata - the only writer on
+  # this path is the menu's own "reset" action.
+  "sheng-data-persist=1",
+]
+
+[payload.adt]
+tool = "scripts/make-vermeer-adt.py"
+chip_id = "207"
+# DarwinBoot reserves one *contiguous* run of conventional memory of this size and
+# places the kernel window inside it; the ADT value is that request, not a hint.
+# 0x130000000 (4.75 GiB, the sheng value) cannot be met on vermeer: the board runs
+# with VERMEER_VENDOR_HW = 0, so VermeerBootMemoryDxe builds the memory map itself
+# and adds at most 1 GiB below 4 GiB in pieces of 16 MiB or more. A 4.75 GiB request
+# therefore always fails with EFI_OUT_OF_RESOURCES and the loader returns to the
+# menu ("first boot does nothing"). The prelinked kernel spans 0x42f6000 (66 MiB)
+# from 0xfffffff00427c000 to 0xfffffff008572000, and this profile carries no ramdisk
+# and no trust cache, so 256 MiB - the loader's own default - is the request that
+# asks for the least contiguous memory while still holding the image, the ADT and
+# the boot_args. Raise it only together with a storage stage (Data seed / trust
+# cache) and re-check the largest conventional-memory run on the device first.
+owned_memory_size = "0x10000000"
+root_match_volume_uuid = "04769D26-2CA0-4825-B443-E2E5F88300F2"
+cpu_regs = "0,0x100,0x200,0x300,0x400,0x500,0x600,0x700"
+packed_data_ramdisk = true
+ipad_identity = true
+unique_chip_id = "required"          # the platform seed is not stored in any repository
+
+# Image parameters come from the Mu-Silicium device config; [bootimg.image] would override them.
+
+# The stock ABL powers the panel off when the device tree has no splash region. The K70 splash
+# carveout (0xb8000000 + 0x2b00000) is identical to sheng's - confirmed from the vermeer dtbo.
+[[bootimg.dtb_node]]
+path = "/reserved-memory/splash_region"
+props = [
+  { name = "label", type = "s", value = "cont_splash_region" },
+  { name = "reg", type = "x", value = ["0x0", "0xb8000000", "0x0", "0x2b00000"] },
+]
