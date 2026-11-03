@@ -1,13 +1,12 @@
 # Board description of the Redmi K60 Pro (socrates, SM8550), read by the unixnu build driver.
-# Ported from the socrates (Redmi K70) bring-up board, itself ported from the proven sheng
+# Ported from the vermeer (Redmi K70) bring-up board, itself ported from the proven sheng
 # (Xiaomi Pad 6S Pro) board: same SM8550 SoC. SoC-level windows (GIC 0x17100000/0x17180000,
-# UFS 0x1d84000, timebase 19.2 MHz, DRAM base 0x80000000) are shared across SM8550 boards.
-# TODO(socrates-firmware): the board-level values below are still the socrates ones until the
-# socrates stock firmware (OS3.0.304.0.WMKCNXM) is unpacked and each is re-read from it:
-#   - [userdata] GPT geometry (sheng placeholder in socrates, never replaced),
-#   - the UEFI FD / stack / Display Reserved windows from the socrates uefiplat.cfg,
-#   - the splash_region carveout of the socrates dtbo (ABL powers the panel down without it),
-#   - panel PCDs and the touch controller of the socrates dtbo.
+# UFS 0x1d84000, timebase 19.2 MHz, DRAM base 0x80000000) are shared across SM8550 boards,
+# and the stock firmware of this phone (OS3.0.304.0.WMKCNXM) has now been read for the
+# board-level values: the UEFI FD / stack / Display Reserved windows match sheng and vermeer
+# (uefiplat.cfg: FD 0xA7000000, stack 0xA760D000, Display Reserved 0xB8000000+0x2B00000),
+# and the splash_region of the socrates dtbo is the same Display Reserved window.
+# The remaining TODO(socrates-*) markers name what is still not measured.
 
 [board]
 name = "socrates"
@@ -31,12 +30,15 @@ fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustC
 "044-76040-038.dmg" = "3f99b859c9728379110b66657c7b15285bcb1925ad8b5726542e2cdcf8b1028d"
 "044-76034-038.dmg" = "b4908cde41d23e6bc05e6af51a2c9eeb00cf0f863a6a18b1600c96a3fd70414f"
 
-# The raw image for the userdata partition. TODO: replace with the GPT entry "userdata" of
-# LUN 0 read from this K60 Pro (fastboot: `fastboot oem get-partition-info userdata` or a GPT
-# dump). The values below are the socrates copy of the sheng placeholder - NOT socrates data.
+# The raw image for the userdata partition. first_lba is measured from the stock GPT of the
+# OS3.0.304.0.WMKCNXM archive (LUN 0, 4096-byte sectors: super ends at 0x2f783f, userdata
+# follows at 0x2f7840 with num_partition_sectors=0 - it is grown to the disk at flash time).
+# TODO(socrates-hardware): last_lba is an ESTIMATE for the 256 GiB unit of this phone (its
+# f2fs reports 234,956,524 KB); replace with the real value from
+# `fastboot oem get-partition-info userdata` (or a GPT dump) before any storage stage.
 [userdata]
-first_lba = 0x2f3840
-last_lba = 0x3d0abfa
+first_lba = 0x2f7840
+last_lba = 0x3dd783f
 lba_bytes = 4096
 windows = [
   { name = "OS", component = "OS" },
@@ -69,10 +71,15 @@ archives = [
 #                                   NativeAdrenoService.cpp only compiles clean with -Werror when
 #                                   build/sheng-gmu/ShengGmuSource.h exists, and that header is generated
 #                                   by prepare-sheng-gmu.py from the SHA-pinned Linux a6xx sources plus the
-#                                   sheng compiled DTS. Neither is in a clean checkout, and the K70 GPU is a
-#                                   different instance (GMU 0x3d68000 vs 0x3d6a000, see GPU-PORT.md), so the
-#                                   sheng register set cannot be reused blindly. CONFIG_XNU_NATIVE_ADRENO is
-#                                   off until the socrates GPU inputs are qualified on hardware.
+#                                   sheng compiled DTS. Neither is in a clean checkout, and the socrates
+#                                   GPU register set is measured (stock base dtb, qcom,kgsl-3d0@3d00000,
+#                                   adreno gen7.2.1): kgsl window 0x3d00000+0x400000 (4 MiB, not the
+#                                   0x40000 of the mainline dtsi), cx_dbgc 0x3d61000+0x8000, rscc
+#                                   0x3d50000+0x10000, isense 0x3d8b000+0x20000, cx_misc 0x3d9e000+0x1000,
+#                                   zap-shader by memory-region. The sheng GMU sources (0x3d6a000) and
+#                                   the vermeer note (0x3d68000) must be re-derived against THIS reg set.
+#                                   CONFIG_XNU_NATIVE_ADRENO stays off until the socrates GPU inputs are
+#                                   qualified on hardware.
 # Disabling a feature here means its symbols are not referenced by the kernel and its archive is not a
 # link input. Re-adding a builder means first recording the evidence it verifies on hardware.
 
@@ -263,11 +270,9 @@ unique_chip_id = "required"          # the platform seed is not stored in any re
 
 # Image parameters come from the Mu-Silicium device config; [bootimg.image] would override them.
 
-# The stock ABL powers the panel off when the device tree has no splash region. The K70 splash
-# carveout (0xb8000000 + 0x2b00000) is identical to sheng's - confirmed from the socrates dtbo.
-# TODO(socrates-firmware): confirm the same carveout from the socrates dtbo before first boot;
-# the K60 Pro panel is also a 3200x1440 WQHD+ dual-DSI video-mode panel, but "same resolution"
-# is not evidence of the same reserved window.
+# The stock ABL powers the panel off when the device tree has no splash region. Measured from
+# the socrates dtbo overlay (entry 50): splash_region 0xb8000000 + 0x2b00000, the same window
+# as the stock uefiplat.cfg's "Display Reserved" - and the same values sheng and vermeer carry.
 [[bootimg.dtb_node]]
 path = "/reserved-memory/splash_region"
 props = [

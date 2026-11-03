@@ -9,13 +9,14 @@ PORTING 文档相同：**每个数值都有出处**——要么是本机固件�
 
 | 环节 | 状态 | 依据 |
 | --- | --- | --- |
-| UEFI 固件（socratesPkg → SILICIUM_UEFI.fd） | 🔧 骨架来自 vermeerPkg，**尚未构建、未上真机** | 本仓库 + `uefi-socrates` |
-| 内核配置 + prelink（iPadOS 17.7.11 / iPad7,1） | 🔧 `configs/socrates_defconfig`，板级数值待固件核对 | vermeer 同款链 |
+| UEFI 固件（socratesPkg → SILICIUM_UEFI.fd） | 🔧 骨架来自 vermeerPkg；**内存图与 RawFiles 已换成 socrates 实测输入**，尚未构建、未上真机 | 本仓库 + `uefi-socrates` |
+| 固件解包 | ✅ base dtb / uefiplat.cfg / dtbo / GPT 全部提取（2026-11-03） | `scripts/data/`，§3.3 |
+| 内核配置 + prelink（iPadOS 17.7.11 / iPad7,1） | 🔧 `configs/socrates_defconfig`，板级注释已按实测值更新 | vermeer 同款链 |
 | payload / boot.img | ⏳ 依赖 kernel + firmware | `build-kernel.yml` 的 `bootimg` job |
 | 存储（UFS） | ⏸ 首启阶段关闭，见 §2.1 | `CONFIG_XNU_NATIVE_UFS=n` |
-| 显示 | 🔧 走 UEFI GOP + `splash_region`（预期 video-mode 面板，待 dtbo 确认） | `[[bootimg.dtb_node]]` |
-| 触摸 | ❌ 控制器型号待 dtbo 确认（预期 Goodix，无驱动） | §4.3 |
-| GPU / WiFi / 音频 | ❌ | `CONFIG_XNU_NATIVE_ADRENO=n` |
+| 显示 | 🔧 走 UEFI GOP + `splash_region`（实测：**command-mode + DSC 面板**，见 §4.5） | `[[bootimg.dtb_node]]` |
+| 触摸 | ❌ Goodix SPI（`xiaomi,m11-spi`）已确认，驱动待写 | §4.3 |
+| GPU / WiFi / 音频 | ❌ GPU 寄存器表已实测（§3.3），驱动未接 | `CONFIG_XNU_NATIVE_ADRENO=n` |
 
 ## 2. 从 vermeer/sheng 继承的结论（同 SoC，预期直接适用）
 
@@ -36,8 +37,8 @@ stage-2a 同证）。
 ### 2.3 ABL 与看门狗
 
 - 无 splash 节点时 ABL 关屏：`/reserved-memory/splash_region` 由 `board.toml` 的
-  `[[bootimg.dtb_node]]` 注入（值为 vermeer 的 0xb8000000+0x2b00000，**待 socrates dtbo
-  确认**）。
+  `[[bootimg.dtb_node]]` 注入（实测值 0xb8000000+0x2b00000，与 stock uefiplat.cfg 的
+  Display Reserved 同窗）。
 - 几秒自动重启 = 看门狗未关（PM8550 WDT），同 vermeer 首启现象。
 - `SOCRATES_VENDOR_HW = 0`（纯 Mu 驱动）时固件自己构内存映射，4 GiB 以下可用内存按
   16 MiB 粒度合并，超大 `owned_memory_size` 请求会 `EFI_OUT_OF_RESOURCES`，`board.toml`
@@ -71,25 +72,32 @@ Mu-Silicium 需要 SEC 先切 SP_ELx（沿用）；`Resources/MuPatches/Gic-Spur
 | GPU | Adreno 740 `gpu@3d00000` |
 | DRAM 基址 | 0x80000000 |
 
-### 3.3 板级（TODO：全部待 socrates 固件提取）
+### 3.3 板级（实测：2026-11-03，自 OS3.0.304.0.WMKCNXM 固件提取）
 
-| 项 | 状态 | 预期 |
-| --- | --- | --- |
-| UEFI FD / stack / Display Reserved 窗 | ⏳ 待 `uefiplat.cfg` | vermeer：FD 0xA7000000、stack 0xA760D000、DispReserved 0xB8000000 |
-| splash carveout | ⏳ 待 dtbo | 与 Display Reserved 同窗 |
-| 面板 / PCD | ⏳ 待 dtbo | 3200×1440 双 DSI video-mode（K60 Pro 2K 屏），以 GOP 实报为准 |
-| 触摸控制器 | ⏳ 待 dtbo | Goodix（vermeer 为 GT9916S @ I²C 0x5d，SE4 GPIO 44–47） |
-| GMU 窗 | ⏳ 待 base dtb | sheng 0x3d6a000 / vermeer 0x3d68000，**必须实测** |
-| `[userdata]` GPT | ⏳ `fastboot oem get-partition-info` | board.toml 现为 sheng 占位值 |
+提取方法：uefiplat.cfg 为 uefi.elf 的明文区（0x4703b–0x490bf，sha256 `90648bc5…`）；
+base dtb 为 vendor_boot.img 的两块 dtb 中的 QCM 块（msm-id 0x25c）；板级节点为
+dtbo.img entry 50（model "8550 socrates"，`xiaomi,miboard-id = 4`，三个 socrates
+条目面板/触摸配置一致）。文件已入 `scripts/data/`，见其 README。
+
+| 项 | 实测值 |
+| --- | --- |
+| UEFI FD / stack / Display Reserved | FD 0xA7000000（4 MiB 窗）、stack 0xA760D000+0x40000、Display Reserved 0xB8000000+0x2B00000 —— 与 sheng/vermeer 相同；DXE Heap 0xBAB00000+0xD1C0000、Kernel 0xA8000000+0x10000000、PIL 0x8A800000+0x18280000、TZApps 0xD8800000+0x7400000 |
+| splash carveout | dtbo `splash_region` = 0xb8000000+0x2b00000（= Display Reserved 窗） |
+| 面板 | `qcom,mdss_dsi_m11_42_02_0a_dsc_cmd`，**1440×3200，DSI command mode + DSC**，"xiaomi 42 02 0a cmd mode dsc dsi panel"；原厂 XML `Panel_M11_42_02_0a_dsc_cmd.xml` 已提取（uefi-socrates/RawFiles） |
+| 触摸 | **Goodix SPI**：`goodix@0`，compatible `xiaomi,m11-spi`，fw `goodix_firmware_m11` / cfg `goodix_cfg_group_m11`，SPI 15 MHz，IRQ GPIO 25、reset GPIO 24（pinctrl GPIO 44–46），panel-max 14400×32000 |
+| GPU（base dtb 实测） | `qcom,kgsl-3d0@3d00000`，adreno gen7.2.1：kgsl 窗 **0x3d00000+0x400000（4 MiB）**、cx_dbgc 0x3d61000+0x8000、rscc 0x3d50000+0x10000、isense 0x3d8b000+0x20000、cx_misc 0x3d9e000+0x1000、zap-shader 走 memory-region |
+| `[userdata]` GPT | first_lba **0x2f7840**（stock GPT，4096B 扇区）；last_lba 为 256 GiB 机型估算值，待 `fastboot oem get-partition-info` 实测 |
+| 保留内存 | 30 个固定 no-map 区 + splash（见 uefi-socrates 的 MemoryMapLib，全部来自实测） |
+| 其他 | 功放 2× CS35L41（@40/@42）、NFC sn-nci nq@28、dtbo 的 disp_rdump_region 在 Display Reserved 窗内 |
 
 ## 4. 首启前必须解决的缺口
 
-### 4.1 固件解包（阻塞项）
+### 4.1 固件解包（✅ 已完成，2026-11-03）
 
-`socrates_images_OS3.0.304.0.WMKCNXM_*.tgz` → `scripts/data/`：
-`socrates.dtb`（boot 镜像内核 dtb）、`socrates-uefiplat.cfg`（uefi.img 的 gzip GUIDed
-section `1D301FE9-…`）、`socrates-dtbo.img`。见
-`scripts/data/SOCRATES-FIRMWARE-NOT-EXTRACTED.md`。
+`socrates.dtb` 与 `socrates-uefiplat.cfg` 已在 `scripts/data/`（出处与 sha256 见其
+README）。uefiplat.cfg 实际是 uefi.elf 里两个压缩 FV 之前的**明文区**（0x4703b–
+0x490bf），无需解压 FV；FV 本身用 UEFIExtract 全量解开以提取 RawFiles（见
+uefi-socrates）。`[userdata]` last_lba 仍需真机 fastboot 实测（估算值已注明）。
 
 ### 4.2 `unique_chip_id`
 
@@ -97,13 +105,27 @@ section `1D301FE9-…`）、`socrates-dtbo.img`。见
 
 ### 4.3 触摸
 
-控制器待 dtbo 确认后写驱动；可借力 `dipa-studio/ios-sweet` 的 Goodix 补丁
-（0060/0062/0063）。注意 edge touch 标记。板里 `sheng-touch` 相关参数保持 0。
+实测为 **Goodix SPI**（`xiaomi,m11-spi`，fw `goodix_firmware_m11`，IRQ 25 / reset 24，
+SPI pinctrl GPIO 44–46，15 MHz）。sheng 的 `NativeNovatekTouch`（I²C NT36532E）与此
+无关，保持 `sheng-touch=0`。可借力 `dipa-studio/ios-sweet` 的 Goodix 补丁
+（0060 GENI SPI、0062、0063），但报文格式要按 m11 固件核对；注意 edge touch 标记。
+`proprietary-files.txt` 的条目要等确认 `/vendor/firmware/goodix_firmware_m11.bin`
+（或同名）后再加，配 SHA-256。
 
 ### 4.4 GPU
 
-`CONFIG_XNU_NATIVE_ADRENO=n` 直到 socrates 的 GMU 窗从 base dtb 读出，
-`prepare-sheng-gmu.py` 的输入集换成 socrates 的。
+寄存器表已实测（§3.3）：kgsl 窗 4 MiB（0x3d00000+0x400000），cx_dbgc 0x3d61000。
+`CONFIG_XNU_NATIVE_ADRENO=n` 保持，直到 `prepare-sheng-gmu.py` 的输入集（SHA 固定的
+Linux a6xx 源 + 编译后的 DTS）换成 socrates 版本并在真机上验证。
+
+### 4.5 显示：command-mode 面板是首启显示链的首要风险
+
+实测面板是 **DSI command mode + DSC**（`m11_42_02_0a_dsc_cmd`），不是 vermeer 的
+video-mode。video-mode 面板自扫描 splash 缓冲，UEFI 不动显示控制器也能"亮"；command
+模式面板的像素流由 MDP 从 framebuffer 持续发出，ABL 交出的 splash 状态在 XNU 接管
+后能否维持未经验证。首启验收允许"屏幕保持 ABL 画面而日志在走"；真黑屏/花屏时优先
+怀疑这条链，再考虑接 DisplayDxe + `Panel_M11_42_02_0a_dsc_cmd.xml`（已提取，在
+uefi-socrates/RawFiles）。
 
 ## 5. 首启验收标准
 
