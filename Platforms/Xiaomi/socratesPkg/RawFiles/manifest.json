@@ -1,0 +1,320 @@
+{
+  "BDS_Menu.cfg": {
+    "ffs_guid_le_hex": "8e831da9faa53841825d455e2303079e",
+    "sha256": "1786bfcb2616efed81ac761f7dc23c63ecd260f1235683b3a67e526ed13018c8",
+    "size": 2944,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "PanelSimConfig.csv": {
+    "ffs_guid_le_hex": "6f25e90321e6d84885767e3b4fcf2d41",
+    "sha256": "ebead6bb52bd867e95749a55235fba4a84a588aee984b37efafa38840137b4a2",
+    "size": 2963,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_M11_42_02_0a_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "40145d4880509f89a66aa88c777411ef",
+    "sha256": "72245aba9cf556d71ca562fc746d4cd31b2fa660b494317509b91a9526dce1ba",
+    "size": 4915,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_M18_38_0c_0a_prim_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "ca422a4c1ab72725a3272b5a3bcdba52",
+    "sha256": "9581cb68ee3c73cfed03b1a8550a442b45b0d9d52083e3c078428a86af286787",
+    "size": 4073,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_M18_38_0c_0a_sec_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "bc215c7b1ab31532b2355a3b2aeacb31",
+    "sha256": "0c6226ed7e92bf088cf5df159ae7602d022c3d22c926b77734387722d94e2f95",
+    "size": 3769,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_M1_42_02_0a_ltpo_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "f48a2a92f447f74497c4d6d157f694b7",
+    "sha256": "572a2f2d76453d692654c255e726800afaa10e201d7873cc485c6ea6e7602e00",
+    "size": 6268,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_M2A_42_02_0b_ltpo_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "b92d99f28fecda4496d8805f74ee205b",
+    "sha256": "e72a885e8491a00fd35254862d740a63243d6f884e74c627f8aa3f0122d75c2e",
+    "size": 3214,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_M2_38_0c_0a_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "60623f684437e94a9aec3ed2ce3f0062",
+    "sha256": "c39575226bc9ca76fc97f21fb50bd9d64643bae0f3ca8f9d409b4ac641cd7d22",
+    "size": 5752,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_M3GL_38_0c_0a_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "ca43847a9ca28844853c2ae73de462a3",
+    "sha256": "5a151cb45a48f320798619c8bbcc8da04668174b40b7fb296e30aad16e880025",
+    "size": 3578,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_M3_38_0c_0a_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "ce033e0e3da60346a1718d0c8fcffc44",
+    "sha256": "5759619b2f5ee41212ed3222932bc0de027372a0d4bd364f413d941f14bb0acd",
+    "size": 5115,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_N11_42_02_0a_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "31e9eaffca579b44ae6aa9d68a7a8790",
+    "sha256": "06ee60cca0b09f7839da5f986ef7ee44c16bb6c9d201849eb28a29e05432567b",
+    "size": 4846,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_N81A_36_02_0a_duldsi_dsc_vid.xml": {
+    "ffs_guid_le_hex": "aa3d0143e40c824d99ee17f772a38401",
+    "sha256": "d590ebacbcd568454897b71bc25611ca4af64157ec6974efbe1913f1bbbe12ab",
+    "size": 5024,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_N81A_36_02_0a_p0_duldsi_dsc_vid.xml": {
+    "ffs_guid_le_hex": "5847a815e19e43459c82f430a70f0813",
+    "sha256": "890059dc626f55add1ad165c0e5edf0ce54b7ff7d155097494d279c5d64124b2",
+    "size": 4874,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_boe_amoled_fhd_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "850617d76559444b930537cdb199b9be",
+    "sha256": "ef479f6d5c9ba77573fc220d3af97464584b6c5f94c29fdfecdb9729502820c9",
+    "size": 2971,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_boe_amoled_wqhd_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "bf5aca88acd09340a68c0cfae1ef9635",
+    "sha256": "72b3b76be7a5a3f72e2f73f276e655744a16d5609b85ffe0e0da4b4482931f69",
+    "size": 3043,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_boe_amoled_wqhd_dsc_vid.xml": {
+    "ffs_guid_le_hex": "c9a52365cb91c045a2dc25997cf23369",
+    "sha256": "8419fee454bf6f3d51e19ef7be59dc4ae2e97cade4344694702cee550953829e",
+    "size": 2899,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_nt36860_wqhd_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "e46e278f5ee73b4c8bccc37771e26478",
+    "sha256": "053331ced3e3e92da8b8357d12084fa7bb81c2c525d5bc6528108696756468d9",
+    "size": 4432,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_nt36860_wqhd_dsc_vid.xml": {
+    "ffs_guid_le_hex": "84482d6fa0d8e911af7ad77b1fe990ec",
+    "sha256": "3067d24617d067e55f28ec5e6deeca5d539407b5235f6764e561cf8d76f22935",
+    "size": 4411,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_r66451_120hz_fhd_plus_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "93c7978261982c429f67d447af1ea812",
+    "sha256": "590f2a03e2ba0a4c5cb552f899e8df9190599133f15eb0bc65accd7794548153",
+    "size": 3800,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_r66451_120hz_fhd_plus_dsc_cmd_demura.xml": {
+    "ffs_guid_le_hex": "c845a2f40e942345a53b82e3c8bc6970",
+    "sha256": "b97623267acd028cfd6edbbc2b17208df6ba6b617b97f658ca5a8b81731c41e6",
+    "size": 3964,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_r66451_120hz_fhd_plus_dsc_cmd_hdk.xml": {
+    "ffs_guid_le_hex": "806315618aeb1846940fab9bdea1eec2",
+    "sha256": "8fa1651ade08c01665a0a6aa107acbd039336315b8852992182fc4b7b8d607a3",
+    "size": 3808,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_r66451_120hz_fhd_plus_dsc_vid.xml": {
+    "ffs_guid_le_hex": "2692b044b4c2ed45aa6f6686db103978",
+    "sha256": "eec1f54b31977830ac5401aa55903f578d32d8906e09e7762f6970aa54fc82a5",
+    "size": 3312,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_r66451_144hz_fhd_plus_dsc_cmd_cphy.xml": {
+    "ffs_guid_le_hex": "0ab67498806b764d8eeb7862c780ec03",
+    "sha256": "4f9ff7b58433e0d2b5fc29776f9952f2667dfc2d0728b45cb89df1436c590140",
+    "size": 3780,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_r66451_144hz_fhd_plus_dsc_vid_cphy.xml": {
+    "ffs_guid_le_hex": "2ee128bce0c7f947bbf90b45ed6f4b18",
+    "sha256": "fc9bba76029ac56f490468155c2ec007bd167ea906e686af6f187cefb9f39033",
+    "size": 3829,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_r66451_60hz_fhd_plus_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "9572ce811d493f4eaaa7ab43fef2f615",
+    "sha256": "9a01febe9c77d62a81d44e8cb9632c157fb0612adb4bdd34b2a34b992641c450",
+    "size": 3129,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_r66451_60hz_fhd_plus_dsc_vid.xml": {
+    "ffs_guid_le_hex": "4dd97a639b7d5f4db420770b65becda8",
+    "sha256": "637bea0f03210b19020875f25aca226035e9c8ecc18f50fc4e75650ded898fc7",
+    "size": 2747,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_secondary_sim_vid.xml": {
+    "ffs_guid_le_hex": "ab352a9a9bc62927a5294c2a6becaa74",
+    "sha256": "85f026ace97fc6a84d5f836e159ce6eaed7423496972b5854b720e23b2a9e5a8",
+    "size": 1871,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_secondary_truly_1080p_cmd.xml": {
+    "ffs_guid_le_hex": "0c58f8d3b8cc0448bb03776e7b542fc2",
+    "sha256": "d7ec7b7c65bb7c25719596ba79d5b2549cfc697e36e8b7b6a9db2bcd9f2be387",
+    "size": 3324,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_secondary_truly_1080p_vid.xml": {
+    "ffs_guid_le_hex": "e9fe92d1046ae84babfe5534e2b457ec",
+    "sha256": "989d4ae4c77b8919a18e63c6a5aa8176a98d2316362baa0e9e5a42d21e85d0a4",
+    "size": 3779,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_secondary_vtdr6130_144hz_fhd_plus_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "2d5eeb234d4a354bbb7bbe39d7ee440d",
+    "sha256": "70ca11002dee12fba441f360b637458dac1f5f6d3ded95997580b908f99b1bf5",
+    "size": 3745,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_secondary_vtdr6130_144hz_fhd_plus_dsc_vid.xml": {
+    "ffs_guid_le_hex": "e1f413a4fe50484882f1efb814608221",
+    "sha256": "84bc6be908c832597db1c53a3b9618e5147f3d01dfc6bbd8db3968068ca87c86",
+    "size": 3350,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_sharp_1080p_cmd.xml": {
+    "ffs_guid_le_hex": "d623e30abe2ee81183499ba636a0d80c",
+    "sha256": "331988253f9be67d620299ddf5227aff7928bfe6cf420d75252310e7c72bd9fa",
+    "size": 2157,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_sharp_120hz_qhd_plus_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "27af600a8dd12f45bb8b1a886f7f6ccc",
+    "sha256": "2eb82782d6f84ec07be89fb5088415b377e40d40bbf57f315fb9203012667530",
+    "size": 5484,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_sharp_120hz_qhd_plus_dsc_vid.xml": {
+    "ffs_guid_le_hex": "386946819ebbdc43a208a41ba82a5861",
+    "sha256": "3828aaf3f0ab331b066f235040160ff7ffa13af22f640f3868d5635703c80eaa",
+    "size": 5342,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_sharp_4k_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "b795c58b1a399a4a82565b9983b30392",
+    "sha256": "18a11e50eb1d7911b17ccc07b480bf5c7f6e1c28e3a461e21f5ca172c0720d3f",
+    "size": 2711,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_sharp_4k_dsc_vid.xml": {
+    "ffs_guid_le_hex": "cd8ab519f8b17840b9a5a33584b680e2",
+    "sha256": "38917fed641d9647b751d6eaafd45198c012d4d43c94a7bb6226333525feb218",
+    "size": 2628,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_truly_1080p_cmd.xml": {
+    "ffs_guid_le_hex": "423b27871d31e8119324dfb2dadfc3d1",
+    "sha256": "c9c3870f2533b5f488c12cc6568d90a2bfbd923ccd8157ca5883d21318670432",
+    "size": 3434,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_truly_1080p_vid.xml": {
+    "ffs_guid_le_hex": "0032fdba1d31e81186510fb3cacf38fb",
+    "sha256": "d7f5ef1df35f03c027cae6ecf56a61178e3c7b2a8786593f7727c3df35d666c5",
+    "size": 3904,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_truly_wqxga_cmd_splitlink.xml": {
+    "ffs_guid_le_hex": "f6970aebdb39d4419b3cca3badc144b4",
+    "sha256": "226e0b5cb315e7685a4194d1bf37f5c56354f87a968afb669da621c4f79571f6",
+    "size": 3550,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_truly_wqxga_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "552cae8c5afc0b41812b8ca22f572f36",
+    "sha256": "7b5aea71b696ff734c3ee423f5e606a45b4c84e473e2cef2e07f110b182b48fc",
+    "size": 3717,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_truly_wqxga_dsc_vid.xml": {
+    "ffs_guid_le_hex": "c99dac1392007443ae1a06ff35950fd0",
+    "sha256": "5a391e5d3972dc8d122903829185d039616a238ecfd8e295ef7ba2df3c4b0ced",
+    "size": 4360,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_truly_wqxga_dual_cmd.xml": {
+    "ffs_guid_le_hex": "f91563fcfef82242a1e3226df55d7592",
+    "sha256": "8879bd430f61dfca666d65e712203a8eb04977822e86a36665bc388f1de84a17",
+    "size": 3473,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_truly_wqxga_dual_vid.xml": {
+    "ffs_guid_le_hex": "40b0e795a22611459abb1d95d6da7082",
+    "sha256": "fd01b4abac0e88eb93e2edead53e4d5b610c1e574eacfd5bbba2a41e6b5fb40d",
+    "size": 3975,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_vtdr6130_144hz_fhd_plus_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "48953fae0c01ec4aa9d24ae3e16d2f8b",
+    "sha256": "5864283e22549e3302da1694ebfe1a5a7a7dd85e49ae9f8a9c4cd3ac733a7790",
+    "size": 3704,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_vtdr6130_144hz_fhd_plus_dsc_cmd_demura.xml": {
+    "ffs_guid_le_hex": "1130e03de8415343a4e502721e71a0f4",
+    "sha256": "fd7ee529c0fa568089ed6f34e74ef25afd7f3be5639cc195aa631337da983661",
+    "size": 3947,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_vtdr6130_144hz_fhd_plus_dsc_cmd_rfi.xml": {
+    "ffs_guid_le_hex": "70d9f40e590bf44aa8f7f6a239eed792",
+    "sha256": "379985dfb58e827adea3f7fdaa7013435c236d987e243338aab1494726d5cedd",
+    "size": 3783,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_vtdr6130_144hz_fhd_plus_dsc_vid.xml": {
+    "ffs_guid_le_hex": "75253712072a4e4cbe926093a55fed33",
+    "sha256": "20c763f08296db84b457997a1a1c438e43ff83c300714d1700af729aa32ef021",
+    "size": 3585,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_vtdr6130_60hz_fhd_plus_dsc_cmd.xml": {
+    "ffs_guid_le_hex": "030e633636028349abdef982b23419fe",
+    "sha256": "b382ac340e5850421cd902ab5b15e4276ccfe2a20b3c6a40810b5dacd85245cb",
+    "size": 3704,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "Panel_vtdr6130_60hz_fhd_plus_dsc_vid.xml": {
+    "ffs_guid_le_hex": "71a13f575c1d124cbdc819dcefbbd483",
+    "sha256": "0fe97de4fe0390bb07b63ad412fc9be810ce39fcc20c67174bbf73fb3899df41",
+    "size": 3506,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "QcomChargerCfg.cfg": {
+    "ffs_guid_le_hex": "7c4bfe450c15da45a0214beb2048ec6f",
+    "sha256": "bf7704d1473b96f93bf69bea6235e40aaf673b43e6039da1d38235b908162aac",
+    "size": 15875,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "SecParti.cfg": {
+    "ffs_guid_le_hex": "de35e2a125e891459623c43175811826",
+    "sha256": "fec3e97db6b6ffcccde69c5047f7631469350d79d204cab6270d882fdab201d7",
+    "size": 5150,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "logo1.bmp": {
+    "ffs_guid_le_hex": "8e831da9faa53841825d455e23030794",
+    "sha256": "d1dd9e5d98208b36ebe9f59a871445d3e2afe69bed610ce073218cb2b5a8ec5e",
+    "size": 48426,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  },
+  "uefipil.cfg": {
+    "ffs_guid_le_hex": "d9bde9213f6c104f84a5bbec322741f1",
+    "sha256": "51facfcbe4c7a80be030ab061f94a30d924bad22f0056d53af372fe9f9c9f61e",
+    "size": 6868,
+    "source": "stock uefi.elf FV (OS3.0.304.0.WMKCNXM), freeform FFS file"
+  }
+}
