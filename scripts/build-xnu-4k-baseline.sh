@@ -103,9 +103,11 @@ if [ ! -d refer/libplatform/.git ]; then
 fi
 export KERNEL_SDKROOT=$ROOT/.cache/fakeroot
 mkdir -p "$KERNEL_SDKROOT/usr/local/include/kernel" "$ROOT/build/xnu/obj/EXPORT_HDRS/libsa"
-ditto refer/libplatform/include "$KERNEL_SDKROOT/usr/local/include"
-ditto refer/libplatform/private "$KERNEL_SDKROOT/usr/local/include"
-ditto refer/libplatform/private/platform "$KERNEL_SDKROOT/System/Library/Frameworks/Kernel.framework/Versions/A/PrivateHeaders/platform"
+# ditto SRC DST (macOS) copies the *contents* of SRC into DST; do the same on Linux
+mkdir -p "$KERNEL_SDKROOT/usr/local/include" "$KERNEL_SDKROOT/System/Library/Frameworks/Kernel.framework/Versions/A/PrivateHeaders"
+cp -R refer/libplatform/include/. "$KERNEL_SDKROOT/usr/local/include/"
+cp -R refer/libplatform/private/. "$KERNEL_SDKROOT/usr/local/include/"
+cp -R refer/libplatform/private/platform/. "$KERNEL_SDKROOT/System/Library/Frameworks/Kernel.framework/Versions/A/PrivateHeaders/platform/"
 if [ ! -d refer/libdispatch/.git ]; then
   git clone --depth 1 --branch "$LIBDISPATCH_TAG" https://github.com/apple-oss-distributions/libdispatch.git refer/libdispatch
 fi
