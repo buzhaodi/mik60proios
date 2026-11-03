@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generate the minimal socrates hardware Apple-format DT for the first boot.
 
-Direct adaptation of the vermeer generator (itself adapted from sheng): the Redmi K60 Pro
+Direct adaptation of the socrates generator (itself adapted from sheng): the Redmi K60 Pro
 is the same SM8550 SoC, so the SoC-level values below (GIC windows, timebase, UFS, DRAM
-base) are shared with sheng and vermeer. TODO(socrates-firmware): they have not yet been
+base) are shared with sheng and socrates. TODO(socrates-firmware): they have not yet been
 confirmed against the socrates stock firmware - before first boot, re-read them from the
 uefiplat.cfg of the OS3.0.304.0.WMKCNXM uefi.img and the socrates base dtb, and confirm
 the Display Reserved carveout at 0xb8000000 from the socrates dtbo.

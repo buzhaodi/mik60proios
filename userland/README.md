@@ -1,4 +1,4 @@
-# vermeer userland
+# socrates userland
 
 一个**自包含的用户态**：单一静态 arm64 Mach-O，被 XNU 当作 PID 1 执行，然后 fork/exec 出自己的
 shell 和心跳进程。没有 libSystem、没有 dyld、没有共享缓存——凡是它用到的能力，都能在源码里一指到具体

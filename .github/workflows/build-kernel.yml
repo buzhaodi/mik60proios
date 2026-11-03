@@ -1,18 +1,18 @@
 name: build-kernel
 
-# Build the flashable artifacts for Redmi K70 (vermeer) on GitHub runners.
+# Build the flashable artifacts for Redmi K70 (socrates) on GitHub runners.
 #
-# kernel (macos-14)   XNU + prelink -> out/vermeer/kernel/kernel.macho
+# kernel (macos-14)   XNU + prelink -> out/socrates/kernel/kernel.macho
 #                     (needs xcodebuild's iphoneos SDK and the Homebrew LLVM/LLD toolchain)
-# firmware (ubuntu)   Mu-Silicium vermeerPkg -> Build/vermeerPkg/<target>_CLANGPDB/FV/SILICIUM_UEFI.fd
+# firmware (ubuntu)   Mu-Silicium socratesPkg -> Build/socratesPkg/<target>_CLANGPDB/FV/SILICIUM_UEFI.fd
 #                     (EDK II CLANGPDB; aarch64-linux-gnu- supplies the binutils EDK II expects)
-# bootimg (ubuntu)    package + payload + bootimg -> out/vermeer/boot/boot.img
+# bootimg (ubuntu)    package + payload + bootimg -> out/socrates/boot/boot.img
 #                     (BootShim + FD, gzip, the device DTB with the splash node, payload ramdisk)
 #
 # Layout on the runner:
-#   $GITHUB_WORKSPACE          this device repository (UniXNU-vermeer, passed via -D)
+#   $GITHUB_WORKSPACE          this device repository (UniXNU-socrates, passed via -D)
 #   $GITHUB_WORKSPACE/unixnu   UniXNU build system checkout (submodules: recursive)
-#   $GITHUB_WORKSPACE/uefi     uefi-vermeer checkout (--uefi)
+#   $GITHUB_WORKSPACE/uefi     uefi-socrates checkout (--uefi)
 #   $GITHUB_WORKSPACE/out      build output (--out)
 #
 # The IPSW is NOT downloaded in full: ipsw.py range-reads the kernelcache and the other
@@ -50,17 +50,17 @@ jobs:
     timeout-minutes: 240
 
     steps:
-      - name: Checkout device repository (UniXNU-vermeer)
+      - name: Checkout device repository (UniXNU-socrates)
         uses: actions/checkout@v4
 
       - name: Checkout UniXNU build system (with submodules)
         uses: actions/checkout@v4
         with:
-          # Fork, not UniXNU/UniXNU upstream: the vermeer-fix branch carries the
+          # Fork, not UniXNU/UniXNU upstream: the socrates-fix branch carries the
           # XNU_NATIVE_LEGACY_DISPLAY guard on the mobile-graphics legacy display probe that
           # this board needs (it builds without the legacy display archive).
-          repository: yyx2025/UniXNU
-          ref: vermeer-fix
+          repository: UniXNU/UniXNU  # TODO(socrates-firmware): move to your fork's socrates branch if framework patches are needed
+          ref: main
           submodules: recursive
           path: unixnu
 
@@ -84,9 +84,9 @@ jobs:
           path: out/ipsw
           key: ipsw-${{ runner.os }}-${{ hashFiles('board.toml') }}
 
-      - name: Configure (defconfig vermeer)
+      - name: Configure (defconfig socrates)
         run: |
-          python3 unixnu/unixnu defconfig vermeer_defconfig -D "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/out"
+          python3 unixnu/unixnu defconfig socrates_defconfig -D "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/out"
 
       - name: Build kernel (XNU + prelink, kernelcache from the IPSW)
         env:
@@ -99,18 +99,18 @@ jobs:
       - name: Upload prelinked kernel
         uses: actions/upload-artifact@v4
         with:
-          name: vermeer-kernel
+          name: socrates-kernel
           path: |
-            out/vermeer/kernel/kernel.macho
-            out/vermeer/kernel/kernel.macho.json
+            out/socrates/kernel/kernel.macho
+            out/socrates/kernel/kernel.macho.json
           if-no-files-found: error
 
       - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vermeer-kernel-logs
-          path: out/vermeer/logs/
+          name: socrates-kernel-logs
+          path: out/socrates/logs/
           if-no-files-found: warn
 
   os-root:
@@ -134,14 +134,14 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: Checkout device repository (UniXNU-vermeer)
+      - name: Checkout device repository (UniXNU-socrates)
         uses: actions/checkout@v4
 
       - name: Checkout UniXNU build system (with submodules)
         uses: actions/checkout@v4
         with:
-          repository: yyx2025/UniXNU
-          ref: vermeer-fix
+          repository: UniXNU/UniXNU  # TODO(socrates-firmware): move to your fork's socrates branch if framework patches are needed
+          ref: main
           submodules: recursive
           path: unixnu
 
@@ -160,15 +160,15 @@ jobs:
       # The storage ABI observation boots the unverified kernel: the verified
       # profile cannot link until build-os-root.py has produced its archive, so
       # this job configures twice, exactly like the qemu bring-up does.
-      - name: Configure (defconfig vermeer, for the storage ABI)
+      - name: Configure (defconfig socrates, for the storage ABI)
         run: |
-          python3 unixnu/unixnu defconfig vermeer_defconfig -D "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/out"
+          python3 unixnu/unixnu defconfig socrates_defconfig -D "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/out"
 
       - name: Checkout Mu-Silicium (BootShim, mkbootimg, panic-screen font)
         uses: actions/checkout@v4
         with:
-          repository: yyx2025/uefi-vermeer
-          ref: vermeer
+          repository: ${{ github.repository_owner }}/uefi-socrates
+          ref: main
           path: uefi
           submodules: false
 
@@ -178,7 +178,7 @@ jobs:
           path: |
             out/ipsw
             .cache/firmware
-          key: ipsw-volumes-vermeer-${{ hashFiles('board.toml') }}-v1
+          key: ipsw-volumes-socrates-${{ hashFiles('board.toml') }}-v1
 
       # extract-target-volume.py opens the zip directly, so it needs the whole
       # file rather than the range-read members the kernel step uses.
@@ -210,14 +210,14 @@ jobs:
       # ADT generator refuses a zero chip id, so the observation run uses the
       # fixed non-zero seed the qemu bring-up uses. It only affects the DT's
       # software identity, not the ABI.
-      - name: Build package and kernel (vermeer_defconfig, for the storage ABI)
+      - name: Build package and kernel (socrates_defconfig, for the storage ABI)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python3 unixnu/unixnu build package kernel \
             -D "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/out"
 
-      - name: Build payload (vermeer_defconfig)
+      - name: Build payload (socrates_defconfig)
         run: |
           python3 unixnu/unixnu build payload \
             -D "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/out" \
@@ -239,7 +239,7 @@ jobs:
           UNIXNU_UEFI: ${{ github.workspace }}/uefi
         run: |
           set -o pipefail
-          cd out/vermeer/tree
+          cd out/socrates/tree
           python3 scripts/build-os-root.py \
             --ipsw "$GITHUB_WORKSPACE/ipsw/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw" \
             --openssl-prefix "$(brew --prefix openssl@3)" 2>&1 | tee "$GITHUB_WORKSPACE/os-root.log"
@@ -256,11 +256,11 @@ jobs:
 
       # The Data seed's volume UUID is generated, not stored: pass it through to
       # the verified kernel exactly as the qemu bring-up does.
-      - name: Configure (defconfig vermeer_verified)
+      - name: Configure (defconfig socrates_verified)
         run: |
-          volume=$(python3 -c "import json;print(json.load(open('out/vermeer/tree/.cache/firmware/owner-data/seed.json'))['volume_uuid'])")
+          volume=$(python3 -c "import json;print(json.load(open('out/socrates/tree/.cache/firmware/owner-data/seed.json'))['volume_uuid'])")
           printf 'XNU_OWNER_DATA_VOLUME_UUID=%s\n' "$volume" >> "$GITHUB_ENV"
-          python3 unixnu/unixnu defconfig vermeer_verified_defconfig \
+          python3 unixnu/unixnu defconfig socrates_verified_defconfig \
             -D "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/out"
 
       - name: Build kernel with the verified-root archive linked in
@@ -273,7 +273,7 @@ jobs:
       - name: Report whether the link resolved the storage symbols
         if: always()
         run: |
-          log=out/vermeer/logs/kernel.log
+          log=out/socrates/logs/kernel.log
           if [ ! -f "$log" ]; then
             echo '::error::kernel.log missing'
             exit 0
@@ -290,20 +290,20 @@ jobs:
       - name: Upload the verified-root kernel
         uses: actions/upload-artifact@v4
         with:
-          name: vermeer-kernel-verified
+          name: socrates-kernel-verified
           path: |
-            out/vermeer/kernel/kernel.macho
-            out/vermeer/kernel/kernel.macho.json
+            out/socrates/kernel/kernel.macho
+            out/socrates/kernel/kernel.macho.json
           if-no-files-found: warn
 
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vermeer-os-root-logs
+          name: socrates-os-root-logs
           path: |
             os-root.log
-            out/vermeer/logs/
+            out/socrates/logs/
           if-no-files-found: warn
 
   firmware:
@@ -311,22 +311,22 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Checkout device repository (UniXNU-vermeer)
+      - name: Checkout device repository (UniXNU-socrates)
         uses: actions/checkout@v4
 
       - name: Checkout UniXNU build system (with submodules)
         uses: actions/checkout@v4
         with:
-          repository: yyx2025/UniXNU
-          ref: vermeer-fix
+          repository: UniXNU/UniXNU  # TODO(socrates-firmware): move to your fork's socrates branch if framework patches are needed
+          ref: main
           submodules: recursive
           path: unixnu
 
-      - name: Checkout Mu-Silicium device firmware (uefi-vermeer)
+      - name: Checkout Mu-Silicium device firmware (uefi-socrates)
         uses: actions/checkout@v4
         with:
-          repository: yyx2025/uefi-vermeer
-          ref: vermeer
+          repository: ${{ github.repository_owner }}/uefi-socrates
+          ref: main
           submodules: recursive
           path: uefi
 
@@ -343,16 +343,16 @@ jobs:
           clang --version
           aarch64-linux-gnu-gcc --version | head -n 1
 
-      - name: Configure (defconfig vermeer)
+      - name: Configure (defconfig socrates)
         run: |
-          python3 unixnu/unixnu defconfig vermeer_defconfig -D "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/out"
+          python3 unixnu/unixnu defconfig socrates_defconfig -D "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/out"
 
-      - name: Build package and firmware (vermeerPkg -> SILICIUM_UEFI.fd)
+      - name: Build package and firmware (socratesPkg -> SILICIUM_UEFI.fd)
         env:
           # EDK II CLANGPDB expects the aarch64 binutils under this prefix.
           CLANGPDB_AARCH64_PREFIX: aarch64-linux-gnu-
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # The board preflight (scripts/check-vermeer.py) cross-checks MemoryMapLib against
+          # The board preflight (scripts/check-socrates.py) cross-checks MemoryMapLib against
           # the stock uefiplat.cfg and needs the Mu-Silicium checkout; it reads UNIXNU_UEFI
           # because the driver runs preflight without --uefi.
           UNIXNU_UEFI: ${{ github.workspace }}/uefi
@@ -364,20 +364,20 @@ jobs:
       - name: Upload firmware volume
         uses: actions/upload-artifact@v4
         with:
-          name: vermeer-firmware
+          name: socrates-firmware
           path: |
-            uefi/Build/vermeerPkg/*/FV/SILICIUM_UEFI.fd
-            out/vermeer/package/Build/Out/
+            uefi/Build/socratesPkg/*/FV/SILICIUM_UEFI.fd
+            out/socrates/package/Build/Out/
           if-no-files-found: error
 
       - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vermeer-firmware-logs
+          name: socrates-firmware-logs
           path: |
-            out/vermeer/logs/
-            uefi/Build/vermeerPkg/*/AARCH64/*.txt
+            out/socrates/logs/
+            uefi/Build/socratesPkg/*/AARCH64/*.txt
           if-no-files-found: warn
 
   bootimg:
@@ -386,35 +386,35 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Checkout device repository (UniXNU-vermeer)
+      - name: Checkout device repository (UniXNU-socrates)
         uses: actions/checkout@v4
 
       - name: Checkout UniXNU build system (with submodules)
         uses: actions/checkout@v4
         with:
-          repository: yyx2025/UniXNU
-          ref: vermeer-fix
+          repository: UniXNU/UniXNU  # TODO(socrates-firmware): move to your fork's socrates branch if framework patches are needed
+          ref: main
           submodules: recursive
           path: unixnu
 
-      - name: Checkout Mu-Silicium device firmware (uefi-vermeer)
+      - name: Checkout Mu-Silicium device firmware (uefi-socrates)
         uses: actions/checkout@v4
         with:
-          repository: yyx2025/uefi-vermeer
-          ref: vermeer
+          repository: ${{ github.repository_owner }}/uefi-socrates
+          ref: main
           submodules: recursive
           path: uefi
 
       - name: Download the prelinked kernel
         uses: actions/download-artifact@v4
         with:
-          name: vermeer-kernel
-          path: out/vermeer/kernel
+          name: socrates-kernel
+          path: out/socrates/kernel
 
       - name: Download the firmware volume
         uses: actions/download-artifact@v4
         with:
-          name: vermeer-firmware
+          name: socrates-firmware
           path: firmware-artifact
 
       - name: Install build dependencies
@@ -454,14 +454,14 @@ jobs:
 
       - name: Place the firmware volume where the driver expects it
         run: |
-          mkdir -p "uefi/Build/vermeerPkg/DEBUG_CLANGPDB/FV"
-          cp firmware-artifact/uefi/Build/vermeerPkg/*/FV/SILICIUM_UEFI.fd \
-             "uefi/Build/vermeerPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd"
-          ls -l "uefi/Build/vermeerPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd"
+          mkdir -p "uefi/Build/socratesPkg/DEBUG_CLANGPDB/FV"
+          cp firmware-artifact/uefi/Build/socratesPkg/*/FV/SILICIUM_UEFI.fd \
+             "uefi/Build/socratesPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd"
+          ls -l "uefi/Build/socratesPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd"
 
-      - name: Configure (defconfig vermeer)
+      - name: Configure (defconfig socrates)
         run: |
-          python3 unixnu/unixnu defconfig vermeer_defconfig -D "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/out"
+          python3 unixnu/unixnu defconfig socrates_defconfig -D "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/out"
 
       - name: Build the payload volume
         env:
@@ -478,35 +478,35 @@ jobs:
           python3 unixnu/unixnu build payload \
             -D "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/out" \
             --uefi "$GITHUB_WORKSPACE/uefi" \
-            --kernel "$GITHUB_WORKSPACE/out/vermeer/kernel/kernel.macho" \
+            --kernel "$GITHUB_WORKSPACE/out/socrates/kernel/kernel.macho" \
             --unique-chip-id "$UNIXNU_UNIQUE_CHIP_ID"
 
       - name: Pack the boot image (BootShim + FD + DTB + payload)
         run: |
-          if [ ! -f out/vermeer/payload/payload.img ]; then
+          if [ ! -f out/socrates/payload/payload.img ]; then
             echo "::warning::No payload volume; skipping bootimg"
             exit 0
           fi
           python3 unixnu/unixnu bootimg \
             -D "$GITHUB_WORKSPACE" --out "$GITHUB_WORKSPACE/out" \
             --uefi "$GITHUB_WORKSPACE/uefi" \
-            --dtb "$GITHUB_WORKSPACE/scripts/data/vermeer.dtb"
+            --dtb "$GITHUB_WORKSPACE/scripts/data/socrates.dtb"
 
       - name: Upload boot image
         uses: actions/upload-artifact@v4
         with:
-          name: vermeer-boot
+          name: socrates-boot
           path: |
-            out/vermeer/boot/boot.img
-            out/vermeer/boot/boot.json
-            out/vermeer/payload/payload.img
-            out/vermeer/payload/payload.json
+            out/socrates/boot/boot.img
+            out/socrates/boot/boot.json
+            out/socrates/payload/payload.img
+            out/socrates/payload/payload.json
           if-no-files-found: warn
 
       - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vermeer-bootimg-logs
-          path: out/vermeer/logs/
+          name: socrates-bootimg-logs
+          path: out/socrates/logs/
           if-no-files-found: warn

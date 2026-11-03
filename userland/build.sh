@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the vermeer userland image on any Linux or macOS host with clang + lld.
+# Build the socrates userland image on any Linux or macOS host with clang + lld.
 #
 # Nothing here needs an Apple SDK: the program includes no system header, so the
 # compile is a plain freestanding cross-compile and the link is ld64.lld with no
@@ -112,7 +112,7 @@ sys.exit(0 if gap >= 16 else 1)
 PY
 
 python3 "$here/adhoc.py" "$out/launchd.macho" \
-    --identifier org.vermeer.userland \
+    --identifier org.socrates.userland \
     --trust-cache "$out/kernel.macho.trustcache" \
     --report "$out/userland.json"
 

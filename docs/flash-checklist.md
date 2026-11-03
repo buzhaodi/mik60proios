@@ -1,4 +1,7 @@
-# 上机检查清单（K70 首启）
+# 上机检查清单（K60 Pro 首启）
+
+> 本文档随 socrates 仓库从 vermeer（Redmi K70）移植底本带入：文中所有真机现象与数值均来自 K70，
+> socrates 首次上机前须按本板固件事实逐项核对。
 
 刷机前的必过项，以及首屏三种结果各自对应什么。**每次上机都从头过一遍**，别跳步——环境问题伪装成镜像问题的次数，比真镜像问题多得多。
 
@@ -131,7 +134,7 @@ fastboot getvar current-slot        # 确认在 a 还是 b
 fastboot oem device-info            # 确认 bootloader 已解锁
 ```
 
-镜像：`out/vermeer/boot/boot.img`（当前 68,657,152 字节 / 65.5 MiB）。
+镜像：`out/socrates/boot/boot.img`（当前 68,657,152 字节 / 65.5 MiB）。
 
 > 曾经失败的那版是 202,874,880 字节，卡在 `Sending 'boot.img' (198120 KB)`。`[payload] size_mib` 已从 192 改成 64。
 
@@ -168,7 +171,7 @@ K70 上必须记住两条约束：
 
 | 约束 | 原因 |
 | --- | --- |
-| `VERMEER_VENDOR_HW = 0` | 没有高通的内存管理器，`VermeerBootMemoryDxe` 自己拼内存映射 |
+| `SOCRATES_VENDOR_HW = 0` | 没有高通的内存管理器，`SocratesBootMemoryDxe` 自己拼内存映射 |
 | 它最多加 1 GiB、必须在 4 GiB 以下、每片 ≥ 16 MiB | `ADD_LIMIT` / `ADD_BELOW` / `MIN_PIECE_SIZE` |
 
 所以照抄 sheng 的 `0x130000000`（4.75 GiB）在 K70 上**永远分配不到**。当前值 256 MiB 的依据：
@@ -186,7 +189,7 @@ FREE <基址> + <长度>      （最多 8 行）
 
 `BIG RUN` 就是 UEFI 眼里最大的一块连续常规内存。窗口只能小于它。
 256 MiB 已是 `DarwinWindowSizeValid` 的下限（`0x10000000`），再往下只有两条路：
-提高 `VermeerBootMemoryDxe` 的 `ADD_LIMIT`，或者启用 vendor 内存管理器。
+提高 `SocratesBootMemoryDxe` 的 `ADD_LIMIT`，或者启用 vendor 内存管理器。
 
 ## 3. 首屏三种结果
 

@@ -35,7 +35,7 @@ CONFIG_XNU_NATIVE_PAN=y
 CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n
 # Off: NativeAdrenoService.cpp only compiles with -Werror once build/sheng-gmu/ShengGmuSource.h
 # exists, and prepare-sheng-gmu.py generates that header from SHA-pinned Linux a6xx sources plus the
-# compiled sheng DTS. Neither is in a clean checkout, and the K70 GMU window (0x3d68000) differs from
+# compiled sheng DTS. Neither is in a clean checkout, and the K60 Pro GMU window (0x3d68000 on vermeer) differs from
 # sheng's (0x3d6a000), so the sheng register set is not valid here. Re-enable together with a
 # socrates-specific GPU input set.
 CONFIG_XNU_NATIVE_ADRENO=n

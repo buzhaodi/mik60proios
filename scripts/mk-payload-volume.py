@@ -268,7 +268,7 @@ def main():
     if len(sys.argv) < 4:
         raise SystemExit(__doc__)
     stage, out, size_mib = sys.argv[1], sys.argv[2], int(sys.argv[3])
-    label = sys.argv[4] if len(sys.argv) > 4 else 'VERMEERESP'
+    label = sys.argv[4] if len(sys.argv) > 4 else 'SOCRATESESP'
     volume = build(stage, out, size_mib, label)
     used = sum(p.stat().st_size for p in Path(stage).rglob('*') if p.is_file())
     print(f'{out}: {os.path.getsize(out)} bytes, {volume.fatsz} sectors per FAT, '

@@ -12,61 +12,55 @@
   <a href="https://x.com/unixnu"><img alt="X" src="https://img.shields.io/badge/X-@unixnu-000000?logo=x&logoColor=white"></a>
 </p>
 
-# UniXNU-vermeer
+# UniXNU-socrates
 
-Device repository for the Redmi K70 (vermeer, SM8550). It holds the board file, kernel defconfig,
-device scripts, drivers and package. Ported from [UniXNU-sheng](https://github.com/UniXNU/UniXNU-sheng):
-same SM8550 SoC and the same stock UEFI memory windows, so UFS, AES, GIC, timers and the serial port
-are the same blocks.
+Device repository for the **Redmi K60 Pro (socrates, SM8550 / Snapdragon 8 Gen 2, Adreno 740)**.
+It holds the board file, kernel defconfig, device scripts, drivers and package.
+
+Ported from [UniXNU-vermeer](https://github.com/yyx2025/UniXNU-vermeer) (Redmi K70), which was
+itself ported from [UniXNU-sheng](https://github.com/UniXNU/UniXNU-sheng) (Xiaomi Pad 6S Pro):
+the same SM8550 SoC, so UFS, AES, GIC, timers and the GPU platform blocks are the same silicon.
+The board-level wiring (panel, touch controller, GMU window, UEFI memory map, splash carveout)
+is **not** the same and is being re-read from this phone's own firmware.
 
 - [Documentation](https://unixnu.com)
 - [Porting guide](https://unixnu.com/porting/)
 - [Build](https://unixnu.com/building)
+- Porting record: [PORTING-SOCRATES.md](PORTING-SOCRATES.md)
 
-Firmware: [uefi-vermeer](https://github.com/yyx2025/uefi-vermeer).
+Firmware: `uefi-socrates` (a Mu-Silicium checkout with `socratesPkg`), kept in a repository of
+your own next to this one.
 
 Build with the `unixnu` driver of [UniXNU](https://github.com/UniXNU/UniXNU). Clone both repositories
 with `--recurse-submodules`; `unixnu fetch` also updates the module submodules.
 
 ## Device support
 
-The boot chain is being qualified on this board. **Nothing in this table is hardware-verified on the
-K70 yet** — the sheng port supplies the SoC-level wiring, and every row below is where this board
-still differs.
+**Nothing in this table is hardware-verified on the K60 Pro yet.** The vermeer and sheng ports
+supply the SoC-level wiring; every row below still needs the socrates firmware inputs and a
+first boot on hardware.
 
 | Feature | State | Notes |
 | --- | --- | --- |
-| UFS | 🔧 | Native UFS driver ported unchanged from sheng; not yet observed on K70 hardware |
-| Display | 🔧 | Mu-Silicium vermeerPkg sets the 1440x3200 panel PCD; the splash carveout is from the K70 dtbo |
-| GPU | ❌ | `CONFIG_XNU_NATIVE_ADRENO=n`. The driver needs `build/sheng-gmu/ShengGmuSource.h`, which is generated from SHA-pinned Linux a6xx sources plus the sheng DTS; neither is in a clean checkout, and the K70 GMU window is `0x3d68000` against sheng's `0x3d6a000` |
-| Touch | ❌ | **Not the same controller as sheng.** The K70 `dtbo.img` declares `goodix,gt9916S` on SE4 (GPIO 44-47, IRQ 25, reset 24) and a secondary `gt9916S2` on SE8 (GPIO 56-59). The linked `NativeNovatekTouch` driver targets sheng's Novatek NT36532E and is not wired into this build |
-| Wi-Fi | ❌ | |
-| Bluetooth | ❌ | |
-| Camera | ❌ | |
-| USB | ❌ | |
-| Audio | ❌ | |
-| Sensors | ❌ | |
-| Battery driver | ❌ | |
-| MiPPS | ❌ | |
-| Suspend and resume | ❌ | |
+| Board file / defconfig | 🔧 | This repository; SM8550 SoC fragment from `UniXNU-sm8550-common` |
+| Firmware (`socratesPkg`) | 🔧 | Skeleton from vermeerPkg; memory map needs the socrates `uefiplat.cfg` |
+| UFS | 🔧 | Native UFS driver ported unchanged from sheng; off until the prelink/verified-root chain exists (see the porting record) |
+| Display | 🔧 | UEFI GOP on the splash framebuffer; panel PCDs 3200×1440 TODO from the socrates dtbo |
+| Touch | ❌ | Controller unknown until the socrates dtbo is read (expect Goodix; vermeer's GT9916S driver notes apply) |
+| GPU | ❌ | Adreno 740 same as sheng; the socrates GMU window must be read from the socrates base dtb before `CONFIG_XNU_NATIVE_ADRENO` can come back |
+| Wi-Fi / Bluetooth / Camera / Audio | ❌ | |
 
 🔧 ported but unverified, ❌ not available.
 
-### Why the GPU and the legacy-display/PMGR instruments are off
+## What is needed before the first boot
 
-Both `build-sheng-platform-power.py` and `build-native-legacy-display.py` verify their output against
-a `native-owner-ufs-*-candidate.macho` produced by a live-device GDB session. A clean CI checkout
-cannot reproduce that evidence, so the builders are absent from `[kernel] archives` and the matching
-`CONFIG_XNU_*` flags are off. Re-adding one means first recording its evidence on hardware.
+1. The stock fastboot archive `socrates_images_OS3.0.304.0.WMKCNXM_*.tgz` (the exact build this
+   phone runs) unpacked into `scripts/data/`: the base dtb, `dtbo.img` and the `uefiplat.cfg`
+   of the stock `uefi.img` — see [scripts/data/SOCRATES-FIRMWARE-NOT-EXTRACTED.md](scripts/data/SOCRATES-FIRMWARE-NOT-EXTRACTED.md).
+2. The board facts re-read from those files: splash carveout, UEFI windows, panel and touch
+   entries, the GMU window, the `[userdata]` GPT geometry.
+3. `uefi-socrates` with the memory map of this board.
 
-## Known gaps before a first boot
-
-1. `[userdata]` in `board.toml` still carries sheng's placeholder GPT geometry. It needs the K70
-   `userdata` entry (`fastboot oem get-partition-info userdata` or a GPT dump).
-2. `[payload.adt] unique_chip_id` is `"required"` and is supplied as a workflow input or the
-   `UNIXNU_UNIQUE_CHIP_ID` secret. Without it the payload and boot image steps are skipped.
-3. Touch has no driver for the Goodix GT9916S in this repository.
-
-## License
-
-BSD-2-Clause-Patent. See [LICENSE](LICENSE).
+The first-boot acceptance is the same as vermeer's: `fastboot boot out/socrates/boot/boot.img`
+shows kernel console output on the panel (or a panic screen) and does not reset after a few
+seconds.

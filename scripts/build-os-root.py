@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Make what vermeer's verified-root profile needs besides the kernel step.
+"""Make what socrates's verified-root profile needs besides the kernel step.
 
 Ported from UniXNU-qemu's build-os-root.py. The steps that differ on this board
-are marked "vermeer:" below; the rest are the board-independent owner-root
+are marked "socrates:" below; the rest are the board-independent owner-root
 pipeline that the QEMU board proved out.
 
 Run in the build tree after "unixnu build package kernel payload". In order:
 
 1. build-storage-abi.py: the original block storage ABI the block drivers bind
-   to (it boots that kernel in QEMU once). vermeer: this is what supplies the
+   to (it boots that kernel in QEMU once). socrates: this is what supplies the
    IOBlockStorageDevice definitions NativeUfs compiles against.
 2. The OS disk image and the SystemOS image of the IPSW in
    .cache/firmware/target-volumes.
@@ -53,7 +53,7 @@ def step(*command):
     subprocess.run([sys.executable, *[str(part) for part in command]], cwd=ROOT, check=True)
 
 
-# 1. storage ABI. vermeer-specific: NativeUfs is the block driver here, not VirtIO.
+# 1. storage ABI. socrates-specific: NativeUfs is the block driver here, not VirtIO.
 if not (ROOT / 'build/storage-abi/interface-audit.json').is_file():
     step(ROOT / 'scripts/build-storage-abi.py')
 
@@ -151,7 +151,7 @@ if not seed.is_file():
     finally:
         raw.unlink()
 
-# 8. the trust-cache bundle AMFI needs. vermeer: the static trust cache of this
+# 8. the trust-cache bundle AMFI needs. socrates: the static trust cache of this
 #    board's IPSW comes from the run's own cache, not from a reference checkout.
 trust = ROOT / 'build/original-static-system-trust/original-static-system.bundle'
 if not trust.is_file():
@@ -184,7 +184,7 @@ if not trust.is_file():
     step(ROOT / 'scripts/build-original-system-trust.py')
 
 volume = json.loads((data / 'seed.json').read_text())['volume_uuid']
-print('vermeer OS root inputs ready. Then:')
+print('socrates OS root inputs ready. Then:')
 print(f'  export XNU_OWNER_DATA_VOLUME_UUID={volume}')
-print('  unixnu defconfig vermeer_verified_defconfig; unixnu build kernel')
+print('  unixnu defconfig socrates_verified_defconfig; unixnu build kernel')
 print(f'  unixnu build payload ... --trust-cache {trust} --data-ramdisk {seed}')

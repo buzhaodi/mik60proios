@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""vermeer override of the UniXNU baseline script: same recipe plus -Wno-unknown-warning-option, because the
+"""socrates override of the UniXNU baseline script: same recipe plus -Wno-unknown-warning-option, because the
 Homebrew LLVM used by CI no longer knows -Wno-unnecessary-virtual-specifier and the build runs with -Werror.
 Re-sync this copy whenever UniXNU/scripts/build-native-adreno-accelerator.py changes.
 

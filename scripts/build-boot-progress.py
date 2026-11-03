@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'build/boot-progress'
 OUT.mkdir(parents=True, exist_ok=True)
 record = json.loads((ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o.json').read_text().strip().rstrip(','))
-source = ROOT / 'kits/vermeer/BootProgress.c'
+source = ROOT / 'kits/socrates/BootProgress.c'
 obj = OUT / 'BootProgress.o'
 command = []
 args = record['arguments']
@@ -30,17 +30,17 @@ while i < len(args):
         command.append(arg)
     i += 1
 # The diagnostic's 5x12 glyph table is a verbatim copy of the Mu-Silicium FrameBufferSerialPortLib Font.h kept in
-# kits/vermeer (the kernel job has no UEFI checkout, so the font cannot be read from a sibling uefi tree).
+# kits/socrates (the kernel job has no UEFI checkout, so the font cannot be read from a sibling uefi tree).
 command += ['-DXNU_BOOT_PROGRESS=1', '-mgeneral-regs-only', '-Wall', '-Wextra', '-Werror',
             '-I', str(ROOT / '.cache/xnu-work/osfmk'),
-            '-I', str(ROOT / 'kits/vermeer')]
+            '-I', str(ROOT / 'kits/socrates')]
 subprocess.run(command, cwd=record['directory'], check=True, timeout=90)
 (OUT / 'compile-command.json').write_text(json.dumps(command,indent=2)+'\n')
-fault_source = ROOT / 'kits/vermeer/BootFaultProbe.c'
+fault_source = ROOT / 'kits/socrates/BootFaultProbe.c'
 fault_obj = OUT / 'BootFaultProbe.o'
 fault_command = [str(fault_source) if arg == str(source) else str(fault_obj) if arg == str(obj) else arg for arg in command]
 subprocess.run(fault_command, cwd=record['directory'], check=True, timeout=90)
-policy_source = ROOT / 'kits/vermeer/BootWatchdogPolicy.c'
+policy_source = ROOT / 'kits/socrates/BootWatchdogPolicy.c'
 policy_obj = OUT / 'BootWatchdogPolicy.o'
 policy_record = json.loads((ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/kern_exec.o.json').read_text().strip().rstrip(','))
 policy_command = []
@@ -61,7 +61,7 @@ while j < len(policy_args):
 policy_command += ['-mgeneral-regs-only', '-Wall', '-Wextra', '-Werror']
 subprocess.run(policy_command, cwd=policy_record['directory'], check=True, timeout=90)
 # The diagnostic file export (BootLog.c's sheng-diag-export) reads files through the VFS: the same BSD-side flags.
-diag_source = ROOT / 'kits/vermeer/BootDiagExport.c'
+diag_source = ROOT / 'kits/socrates/BootDiagExport.c'
 diag_obj = OUT / 'BootDiagExport.o'
 diag_command = [str(diag_source) if arg == str(policy_source) else str(diag_obj) if arg == str(policy_obj) else arg for arg in policy_command]
 subprocess.run(diag_command, cwd=policy_record['directory'], check=True, timeout=90)

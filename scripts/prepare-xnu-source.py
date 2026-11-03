@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Restore omitted DriverKit headers from Apple's earlier Darwin 23 source.
 
-vermeer override of scripts/prepare-xnu-source.py (a device repository replaces a
+socrates override of scripts/prepare-xnu-source.py (a device repository replaces a
 script of the same name, scripts/unixnu/tree.py). The upstream version lists the
 files through the unauthenticated GitHub contents API, which on a shared CI
-runner is rate limited to 60 requests per hour per IP; the first vermeer CI run
+runner is rate limited to 60 requests per hour per IP; the first socrates CI run
 stopped there with HTTP 403. This version reads the same files out of a shallow
 git checkout of the pinned Apple tag, so it needs no API at all, and keeps the
 API as a fallback for hosts where git cannot reach GitHub.

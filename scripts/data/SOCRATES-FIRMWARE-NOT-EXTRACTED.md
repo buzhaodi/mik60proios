@@ -9,4 +9,4 @@ archive `socrates_images_OS3.0.304.0.WMKCNXM_*.tgz` (the exact build this phone 
 | `socrates-uefiplat.cfg` | the gzip GUIDed section `1D301FE9-...` of the stock `uefi.img` FV | `scripts/check-socrates.py`, MemoryMapLib |
 | `socrates-dtbo.img` | `images/dtbo.img` | panel, touch, GMU window, splash_region |
 
-Do not copy the vermeer or sheng equivalents here: same SoC, different board wiring.
+Do not copy the socrates or sheng equivalents here: same SoC, different board wiring.

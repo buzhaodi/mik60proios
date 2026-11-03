@@ -1,10 +1,10 @@
 # Board description of the Redmi K60 Pro (socrates, SM8550), read by the unixnu build driver.
-# Ported from the vermeer (Redmi K70) bring-up board, itself ported from the proven sheng
+# Ported from the socrates (Redmi K70) bring-up board, itself ported from the proven sheng
 # (Xiaomi Pad 6S Pro) board: same SM8550 SoC. SoC-level windows (GIC 0x17100000/0x17180000,
 # UFS 0x1d84000, timebase 19.2 MHz, DRAM base 0x80000000) are shared across SM8550 boards.
-# TODO(socrates-firmware): the board-level values below are still the vermeer ones until the
+# TODO(socrates-firmware): the board-level values below are still the socrates ones until the
 # socrates stock firmware (OS3.0.304.0.WMKCNXM) is unpacked and each is re-read from it:
-#   - [userdata] GPT geometry (sheng placeholder in vermeer, never replaced),
+#   - [userdata] GPT geometry (sheng placeholder in socrates, never replaced),
 #   - the UEFI FD / stack / Display Reserved windows from the socrates uefiplat.cfg,
 #   - the splash_region carveout of the socrates dtbo (ABL powers the panel down without it),
 #   - panel PCDs and the touch controller of the socrates dtbo.
@@ -33,7 +33,7 @@ fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustC
 
 # The raw image for the userdata partition. TODO: replace with the GPT entry "userdata" of
 # LUN 0 read from this K60 Pro (fastboot: `fastboot oem get-partition-info userdata` or a GPT
-# dump). The values below are the vermeer copy of the sheng placeholder - NOT socrates data.
+# dump). The values below are the socrates copy of the sheng placeholder - NOT socrates data.
 [userdata]
 first_lba = 0x2f3840
 last_lba = 0x3d0abfa
@@ -264,7 +264,7 @@ unique_chip_id = "required"          # the platform seed is not stored in any re
 # Image parameters come from the Mu-Silicium device config; [bootimg.image] would override them.
 
 # The stock ABL powers the panel off when the device tree has no splash region. The K70 splash
-# carveout (0xb8000000 + 0x2b00000) is identical to sheng's - confirmed from the vermeer dtbo.
+# carveout (0xb8000000 + 0x2b00000) is identical to sheng's - confirmed from the socrates dtbo.
 # TODO(socrates-firmware): confirm the same carveout from the socrates dtbo before first boot;
 # the K60 Pro panel is also a 3200x1440 WQHD+ dual-DSI video-mode panel, but "same resolution"
 # is not evidence of the same reserved window.

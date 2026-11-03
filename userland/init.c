@@ -1,4 +1,4 @@
-// vermeer userland: the first EL0 process on the Redmi K70.
+// socrates userland: the first EL0 process on the Redmi K70.
 //
 // What this is
 // ------------
@@ -106,7 +106,7 @@ static void print_rule(char c)
  * faults or is not backed fails here instead of much later. */
 static int probe_memory(usize bytes)
 {
-	const u64    pattern = 0x7665726d656572ULL;   /* "vermeer" */
+	const u64    pattern = 0x7665726d656572ULL;   /* "socrates" */
 	const usize  step = 4096;
 	u8          *p = (u8 *)sys_mmap(0, bytes, PROT_READ | PROT_WRITE,
 	                                MAP_PRIVATE | MAP_ANON, -1, 0);
@@ -356,7 +356,7 @@ static void role_shell(void)
 	char line[128];
 
 	printf("[sh]   pid=%ld, reading /dev/console\n", sys_getpid());
-	con_puts("vermeer> ");
+	con_puts("socrates> ");
 	for (;;) {
 		int n = read_line(line, sizeof(line));
 		if (n < 0) {
@@ -365,11 +365,11 @@ static void role_shell(void)
 			halt_forever();
 		}
 		if (n == 0) {
-			con_puts("vermeer> ");
+			con_puts("socrates> ");
 			continue;
 		}
 		run_command(line);
-		con_puts("vermeer> ");
+		con_puts("socrates> ");
 	}
 }
 
@@ -419,7 +419,7 @@ static void role_supervisor(void)
 	boot_time.tv_sec = now_seconds();
 
 	print_rule('=');
-	con_puts("  vermeer userland " VERSION "  -  first EL0 process on the K70\n");
+	con_puts("  socrates userland " VERSION "  -  first EL0 process on the K70\n");
 	print_rule('=');
 	printf("[init] pid=%ld ppid=%ld uid=%ld euid=%ld\n", sys_getpid(), sys_getppid(),
 	       sys_getuid(), sys_geteuid());

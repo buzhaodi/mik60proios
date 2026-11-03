@@ -211,7 +211,7 @@ def build_superblob(cd):
 
 def trust_cache_bundle(cdhash):
     """Version-1 header (count, offsets) around one version-2 module."""
-    module_uuid = uuid.uuid5(uuid.NAMESPACE_URL, 'vermeer-userland:' + cdhash.hex())
+    module_uuid = uuid.uuid5(uuid.NAMESPACE_URL, 'socrates-userland:' + cdhash.hex())
     module = struct.pack('<I16sI', 2, module_uuid.bytes, 1)
     module += cdhash + bytes([HASH_TYPE_SHA256, 0, 0, 0])
     return struct.pack('<2I', 1, 8) + module
@@ -220,7 +220,7 @@ def trust_cache_bundle(cdhash):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('binary')
-    ap.add_argument('--identifier', default='org.vermeer.userland')
+    ap.add_argument('--identifier', default='org.socrates.userland')
     ap.add_argument('--trust-cache', help='write the trust cache bundle here')
     ap.add_argument('--report', help='write a JSON report here')
     args = ap.parse_args()

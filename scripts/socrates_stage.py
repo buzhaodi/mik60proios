@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Helpers shared by the vermeer storage-ABI and OS-root scripts.
+"""Helpers shared by the socrates storage-ABI and OS-root scripts.
 
 Ported from UniXNU-qemu's scripts/qemu_esp.py. The QEMU board builds an ESP for
-QEMU's own EDK II firmware; vermeer builds a payload volume for the Mu-Silicium
+QEMU's own EDK II firmware; socrates builds a payload volume for the Mu-Silicium
 firmware on the device, so only the staging conventions are shared here:
 
-  ROOT   the device repository (UniXNU-vermeer)
-  WORK   the build tree of this board (out/vermeer)
+  ROOT   the device repository (UniXNU-socrates)
+  WORK   the build tree of this board (out/socrates)
   stage()  a directory holding UniXNU, DarwinBoot and a kernel, in the layout the
            board's firmware expects
 
 The layout difference matters and is the reason this is not a straight copy:
-vermeer's firmware reads \\EFI\\UniXNU and the payload volume from the boot
+socrates's firmware reads \\EFI\\UniXNU and the payload volume from the boot
 image's ramdisk, while QEMU's reads an ESP. stage() therefore only produces a
 directory that mirrors that volume; the caller decides where to place it.
 """
@@ -22,8 +22,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-# CI layout: scripts run from out/vermeer/tree (resolved to the linked tree, not
-# the checkout), so ROOT.parent is out/vermeer and every build product (kernel/,
+# CI layout: scripts run from out/socrates/tree (resolved to the linked tree, not
+# the checkout), so ROOT.parent is out/socrates and every build product (kernel/,
 # payload/, package/, logs/) sits directly under it — the same convention
 # UniXNU-qemu's qemu_esp.py relies on.
 WORK = ROOT.parent

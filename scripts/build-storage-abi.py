@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Qualify the original block storage ABI on vermeer: build/storage-abi/interface-audit.json.
+"""Qualify the original block storage ABI on socrates: build/storage-abi/interface-audit.json.
 
 Ported from UniXNU-qemu. UniXNU's audit-storage-interface.py reads three inputs
 that no UniXNU script produces (UniXNU#7); this script makes them from this
@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from vermeer_stage import ROOT, WORK, stage  # noqa: E402
+from socrates_stage import ROOT, WORK, stage  # noqa: E402
 
 AUDIT = ROOT / 'scripts/audit-storage-interface.py'
 kernel = WORK / 'kernel/kernel.macho'

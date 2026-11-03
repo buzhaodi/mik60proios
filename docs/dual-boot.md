@@ -1,5 +1,8 @@
 # 双系统：不擦安卓数据，也能进 iOS 用户态
 
+> 本文档随 socrates 仓库从 vermeer（Redmi K70）移植底本带入：文中所有真机现象与数值均来自 K70，
+> socrates 首次上机前须按本板固件事实逐项核对。
+
 结论：**在存储层面完全可行**，因为 UniXNU 的 iOS 根卷只是"一段裸块范围 + 一个 4 KiB 清单"，并不要求它叫 `userdata`。真正决定"要不要清数据"的只有一件事：这段范围放在哪里。
 
 ## 1. 先看清存储模型
@@ -76,7 +79,7 @@ CONFIG_XNU_NATIVE_UFS=n
 `fastboot boot boot.img` **不写任何分区**，只从内存引导一次。所以形态天生就是：
 
 - 平时开机 → 安卓（boot 分区没动过）
-- 想进 iOS → `fastboot boot out/vermeer/boot/boot.img`
+- 想进 iOS → `fastboot boot out/socrates/boot/boot.img`
 
 这已经满足"双系统"的日常含义，且不需要动任何分区表。真正的取舍只在"iOS 根卷是否需要持久化"。
 

@@ -4,11 +4,11 @@
 # that UniXNU-qemu proved out end to end (iPadOS 17 to its home screen). The
 # differences from the QEMU board are the ones this board actually needs:
 #
-#   * NativeUfs instead of NativeVirtioBlock: the K70 boots from UFS, and its
+#   * NativeUfs instead of NativeVirtioBlock: the K60 Pro boots from UFS, and its
 #     block driver is what the verified-root policies authenticate;
-#   * SHENG_PMGR off: the K70 PMGR window differs from sheng's, and the sheng
+#   * SHENG_PMGR off: the K60 Pro PMGR window differs from sheng's, and the sheng
 #     verify-proofs need a live-device GDB session;
-#   * NATIVE_LEGACY_DISPLAY off: the K70 display chain is not qualified here,
+#   * NATIVE_LEGACY_DISPLAY off: the K60 Pro display chain is not qualified here,
 #     and the UEFI frame buffer is already published by SimpleFbDxe.
 #
 # The verified-root archive is what makes the kernel link: NativeUfs is compiled
@@ -47,15 +47,15 @@ CONFIG_XNU_OWNER_BOOT_MANIFEST=y
 CONFIG_XNU_OWNER_UNION_SYSTEMOS=y
 CONFIG_XNU_OWNER_DATA_MOUNT=y
 
-# Off: the K70 PMGR window differs from sheng's and the sheng verify-proofs need
+# Off: the K60 Pro PMGR window differs from sheng's and the sheng verify-proofs need
 # a live-device GDB session (see socrates_defconfig).
 CONFIG_XNU_SHENG_PMGR=n
-# Off: the K70 display chain is not qualified; SimpleFbDxe publishes the UEFI
+# Off: the K60 Pro display chain is not qualified; SimpleFbDxe publishes the UEFI
 # frame buffer (see socrates_defconfig).
 CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n
 CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
 # Off: needs build/sheng-gmu/ShengGmuSource.h from SHA-pinned Linux a6xx sources
-# plus the compiled sheng DTS, and the K70 GMU window differs from sheng's.
+# plus the compiled sheng DTS, and the K60 Pro GMU window differs from sheng's.
 CONFIG_XNU_NATIVE_ADRENO=n
 CONFIG_XNU_ARMVIRT_PLATFORM=n
 

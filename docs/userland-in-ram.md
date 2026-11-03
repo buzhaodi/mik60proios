@@ -1,5 +1,8 @@
 # 用户态放进内存：能放什么、放不下什么
 
+> 本文档随 socrates 仓库从 vermeer（Redmi K70）移植底本带入：文中所有真机现象与数值均来自 K70，
+> socrates 首次上机前须按本板固件事实逐项核对。
+
 结论先说：**XNU 本身支持"从内存里的一个块设备当根卷"，这条路一行驱动都不用加；但"iOS 的用户态"
 放到内存里放不进去 —— 不是架构问题，是体积问题。**
 
@@ -7,7 +10,7 @@
 
 | 目标 | 真实体积 | 来源 |
 | --- | --- | --- |
-| 现在这张镜像（内核到控制台） | 内核 51.5 MiB，boot.img 65.5 MiB | `work/vermeer-boot-ci` |
+| 现在这张镜像（内核到控制台） | 内核 51.5 MiB，boot.img 65.5 MiB | `work/socrates-boot-ci` |
 | 恢复模式用户态（launchd + dyld cache + /System） | **176 MiB** | `RestoreRamDisk` = `044-75545-038.dmg` |
 | 正常 iOS 根卷 | **4.0 GiB**（`OS`）+ 1.23 GiB（`Cryptex1,SystemOS`） | 同一个 IPSW |
 
@@ -52,7 +55,7 @@ DarwinBoot 侧的接口也现成：ADT 生成器的 `--ramdisk` 只往 `/chosen/
 - `unixnu build payload --userland FILE` 已实现：镜像里多一个 `Payloads/userland.img`，
   ADT 多一个 `RAMDisk` 占位符，`unixnu.toml` 多一个 `rd=md0` 的 entry（`id = "userland"`），
   默认 entry 不变。卷大小取 `[payload] size_mib_userland`（本板 240），默认 entry 仍是 64 MiB。
-- `scripts/make-vermeer-adt.py --ramdisk` 只写占位符，不写 `ephemeral-storage`（那是 Data 种子专用）。
+- `scripts/make-socrates-adt.py --ramdisk` 只写占位符，不写 `ephemeral-storage`（那是 Data 种子专用）。
 - 外壳已经算清：`044-75545-038.dmg` 共 184,549,403 字节 = **27 字节 IM4P 头** + 184,549,376 字节
   APFS 容器。容器起点 27 可以直接验证：`nx_superblock` 的魔数 `NXSB` 落在文件偏移 59，即容器内 32
   （块 0 的 `nx_magic` 字段），而 `nx_block_size`(4096) × `nx_block_count`(45056) 又恰好等于

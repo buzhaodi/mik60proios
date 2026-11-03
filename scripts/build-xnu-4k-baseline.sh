@@ -49,7 +49,7 @@ for PATCH in "$ROOT"/patches/xnu/*.patch "$ROOT"/kits/NativePrelink/patches/*.pa
 done
 export XNU_AVAILABILITY_PL=$ROOT/.cache/fakeroot/usr/local/libexec/availability.pl
 python3 scripts/prepare-xnu-source.py
-# vermeer: the boot-time GPU addon mount (zzy) stores BINDM_FORCE_ROOT in bindfs_mount's flags, but the
+# socrates: the boot-time GPU addon mount (zzy) stores BINDM_FORCE_ROOT in bindfs_mount's flags, but the
 # reference bindfs.h does not define it. Add the flag once, after the patches, so every pass sees it.
 python3 - <<'PY'
 from pathlib import Path
@@ -59,7 +59,7 @@ if path.is_file():
     if 'BINDM_FORCE_ROOT' not in text:
         anchor = '#define BINDM_CACHE 0x0001\n'
         if anchor not in text:
-            raise SystemExit('vermeer: bindfs.h anchor missing')
+            raise SystemExit('socrates: bindfs.h anchor missing')
         path.write_text(text.replace(anchor, anchor + '#define BINDM_FORCE_ROOT 0x80000000ULL\n', 1))
 PY
 # The first pass of a new tree (XNU_BOOTSTRAP=1, set by the unixnu driver) only has to leave the compile records and
