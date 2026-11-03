@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Generate the minimal vermeer hardware Apple-format DT for the first boot.
+"""Generate the minimal socrates hardware Apple-format DT for the first boot.
 
-Direct adaptation of the proven sheng generator: the Redmi K70 is the same SM8550
-SoC, and the K70 stock uefiplat.cfg (extracted from the OS1.0.x uefi.img) confirms
-every pinned hardware value below - GIC windows, timebase, UFS, DRAM base, and the
-Display Reserved carveout at 0xb8000000 are identical to sheng.
+Direct adaptation of the vermeer generator (itself adapted from sheng): the Redmi K60 Pro
+is the same SM8550 SoC, so the SoC-level values below (GIC windows, timebase, UFS, DRAM
+base) are shared with sheng and vermeer. TODO(socrates-firmware): they have not yet been
+confirmed against the socrates stock firmware - before first boot, re-read them from the
+uefiplat.cfg of the OS3.0.304.0.WMKCNXM uefi.img and the socrates base dtb, and confirm
+the Display Reserved carveout at 0xb8000000 from the socrates dtbo.
 
 The tree mirrors the proven QEMU entry fixture structure (same required
 nodes and properties the source XNU boot converged on) with real pinned
-vermeer SM8550 values taken from the compiled board DT:
+socrates SM8550 values taken from the compiled board DT:
 
   - GICv3 distributor 0x17100000/0x10000, redistributor 0x17180000/0x200000
     (arm-io child offsets under an APSS range at 0x17000000), stride 0x40000
@@ -76,7 +78,7 @@ def empty_nvram_proxy():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path,
-                        default=ROOT / 'build/vermeer/boot/kernel.macho.adt')
+                        default=ROOT / 'build/socrates/boot/kernel.macho.adt')
     parser.add_argument('--dram-size', type=lambda value: int(value, 0), required=True,
                         help='Actual observed DRAM size, e.g. 0x230000000')
     parser.add_argument('--owned-memory-size', type=lambda value: int(value, 0), default=None,
@@ -88,7 +90,7 @@ def main():
     parser.add_argument('--chip-id', type=lambda value: int(value, 16), default=None)
     parser.add_argument('--ipad-identity', action='store_true',
                         help='/product and /buttons describe an iPad-class device without a Home button (MobileGestalt reads these from the tree); '
-                             'values follow the unchanged iPad7,1 tree, the panel geometry and button set are vermeer\'s')
+                             'values follow the unchanged iPad7,1 tree, the panel geometry and button set are socrates\'s')
     parser.add_argument('--cpu-regs', default='0',
                         help='Comma-separated CPU MPIDR affinity values (the /cpus reg of each core); the first is the running boot CPU. '
                              'SM8550 numbers its cores 0x000..0x700 in Affinity1 (sm8550.dtsi). More than one adds /psci')
@@ -126,10 +128,10 @@ def main():
     tree = node('device-tree', [
         # hw.product/hw.machine/hw.target come from the root 'model'/'target-type' (IODTPlatformExpert);
         # libMobileGestalt prefix-matches hw.product against iPhone/iPod/iPad, so the iPad identity needs both here.
-        ('model', b'iPad7,1\0' if args.ipad_identity else b'vermeer-first-boot\0'),
+        ('model', b'iPad7,1\0' if args.ipad_identity else b'socrates-first-boot\0'),
         *([('target-type', b'J120\0')] if args.ipad_identity else []),
-        # Root compatible strings of the compiled board DT (xiaomi,vermeer / qcom,sm8550).
-        ('compatible', b'xiaomi,vermeer\0qcom,sm8550\0'),
+        # Root compatible strings of the compiled board DT (xiaomi,socrates / qcom,sm8550).
+        ('compatible', b'xiaomi,socrates\0qcom,sm8550\0'),
         ('#address-cells', struct.pack('<I', 2)),
         ('#size-cells', struct.pack('<I', 2)),
     ], [
@@ -177,11 +179,11 @@ def main():
         # The original AppleImage4 panics without a product node. Name and model are the
         # board DT's own strings.
         *( [node('buttons', [('compatible', b'buttons\0'), ('device_type', b'buttons\0'),
-                             # No 'menu' entry: vermeer has no Home button. 2 = the non-mechanical answer BSPlatform passes through.
+                             # No 'menu' entry: socrates has no Home button. 2 = the non-mechanical answer BSPlatform passes through.
                              ('button-names', b'hold\0voldown\0volup\0'),
                              ('home-button-type', struct.pack('<I', 2))])] if args.ipad_identity else [] ),
         node('product', [('product-name', b'iPad Pro (12.9-inch) (2nd generation)\0' if args.ipad_identity else b'Redmi K70\0'),
-                         ('model', b'xiaomi,vermeer\0'),
+                         ('model', b'xiaomi,socrates\0'),
                          *( [('product-description', b'iPad Pro (12.9-inch) (2nd generation)\0'),
                              ('artwork-device-idiom', b'pad\0'),
                              ('artwork-device-subtype', struct.pack('<I', 2732)),
@@ -205,7 +207,7 @@ def main():
     ])
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(tree)
-    print(f'vermeer ADT: {len(tree)} bytes, dram {args.dram_size:#x}, timebase {TIMEBASE}')
+    print(f'socrates ADT: {len(tree)} bytes, dram {args.dram_size:#x}, timebase {TIMEBASE}')
 
 
 if __name__ == '__main__':

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the vermeer platform intervals against the bundled device tree and stock uefiplat.cfg.
+"""Check the socrates platform intervals against the bundled device tree and stock uefiplat.cfg.
 
 Robust port of check-sheng.py: the DTB and the K70 stock uefiplat.cfg (extracted from the
 OS1.0.x uefi.img, FV at 0xa7000000) are bundled in scripts/data, so the check is
@@ -16,18 +16,18 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 DATA = HERE / 'data'
-DTB = DATA / 'vermeer.dtb'
-STOCK_CFG = DATA / 'vermeer-uefiplat.cfg'
+DTB = DATA / 'socrates.dtb'
+STOCK_CFG = DATA / 'socrates-uefiplat.cfg'
 
 
 def find_uefi():
     candidates = [os.environ.get('UNIXNU_UEFI'),
-                  HERE / '../../uefi-vermeer',
-                  HERE / '../../../uefi-vermeer',
-                  HERE / 'uefi-vermeer',
-                  Path('uefi-vermeer')]
+                  HERE / '../../uefi-socrates',
+                  HERE / '../../../uefi-socrates',
+                  HERE / 'uefi-socrates',
+                  Path('uefi-socrates')]
     for candidate in candidates:
-        if candidate and (Path(candidate) / 'Platforms/Xiaomi/vermeerPkg').is_dir():
+        if candidate and (Path(candidate) / 'Platforms/Xiaomi/socratesPkg').is_dir():
             return Path(candidate)
     return None
 
@@ -42,9 +42,9 @@ def cells(node, prop):
 
 if __name__ == '__main__':
     uefi = find_uefi()
-    platform = uefi / 'Platforms/Xiaomi/vermeerPkg' if uefi else None
+    platform = uefi / 'Platforms/Xiaomi/socratesPkg' if uefi else None
     if platform is None or not (platform / 'Library/MemoryMapLib/MemoryMapLib.c').is_file():
-        print('check-vermeer: Mu-Silicium vermeerPkg not found; set UNIXNU_UEFI (memory-map cross-check skipped)')
+        print('check-socrates: Mu-Silicium socratesPkg not found; set UNIXNU_UEFI (memory-map cross-check skipped)')
         sys.exit(0)
     nodes = subprocess.check_output(['fdtget', '-l', str(DTB), '/reserved-memory'], text=True).split()
     reservations = []
@@ -72,19 +72,19 @@ if __name__ == '__main__':
         for other, other_base, other_size, _ in rows[index + 1:]:
             if max(base, other_base) < min(base + size, other_base + other_size):
                 errors.append(f'Overlapping intervals: {name}, {other}')
-    config_text = (uefi / 'Resources/Configs/vermeer.toml').read_text()
+    config_text = (uefi / 'Resources/Configs/socrates.toml').read_text()
     import tomllib
     config = tomllib.loads(config_text)
     fd = config['uefi_fd']
     if not any(n == 'UEFI FD' and a == fd['base'] and s == fd['size'] for n, a, s, _ in rows):
         errors.append('FD configuration does not match memory descriptor')
-    dsc = (platform / 'vermeer.dsc').read_text()
+    dsc = (platform / 'socrates.dsc').read_text()
     stack = re.search(r'PcdCPUCoresStackBase\|(0x[0-9a-fA-F]+)', dsc)
     if not stack or not any(n == 'UEFI Stack' and a == int(stack[1], 16) for n, a, _, _ in rows):
         errors.append('Stack configuration does not match memory descriptor')
     dependencies = set()
     for inc in (platform / 'Include').glob('*.inc'):
-        dependencies.update(re.findall(r'Binaries/vermeer/[^\s}]+', inc.read_text()))
+        dependencies.update(re.findall(r'Binaries/socrates/[^\s}]+', inc.read_text()))
     missing = sorted(p for p in dependencies if not (uefi / p).is_file())
     stock_count = 0
     text = STOCK_CFG.read_text().split('[MemoryMap]', 1)[1].split('[RegisterMap]', 1)[0]
@@ -110,11 +110,11 @@ if __name__ == '__main__':
               'stock_regions_checked': stock_count,
               'static_errors': errors, 'missing_vendor_inputs': missing,
               'runtime_ram_verified': False, 'hardware_boot_demonstrated': False}
-    out = Path('build/vermeer')
+    out = Path('build/socrates')
     out.mkdir(parents=True, exist_ok=True)
     (out / 'check.json').write_text(json.dumps(result, indent=2) + '\n')
     print(f'{len(reservations)} DTS reservations checked against {len(rows)} descriptors')
-    print(f'{len(errors)} static errors; {len(missing)} vendor inputs still missing (unused at VERMEER_VENDOR_HW=0); hardware unverified')
+    print(f'{len(errors)} static errors; {len(missing)} vendor inputs still missing (unused at SOCRATES_VENDOR_HW=0); hardware unverified')
     for error in errors:
         print(error)
     raise SystemExit(bool(errors))

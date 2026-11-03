@@ -1,6 +1,6 @@
-# Kernel configuration of the vermeer verified-root profile.
+# Kernel configuration of the socrates verified-root profile.
 #
-# This is vermeer_defconfig plus the owner-root chain, following the combination
+# This is socrates_defconfig plus the owner-root chain, following the combination
 # that UniXNU-qemu proved out end to end (iPadOS 17 to its home screen). The
 # differences from the QEMU board are the ones this board actually needs:
 #
@@ -48,10 +48,10 @@ CONFIG_XNU_OWNER_UNION_SYSTEMOS=y
 CONFIG_XNU_OWNER_DATA_MOUNT=y
 
 # Off: the K70 PMGR window differs from sheng's and the sheng verify-proofs need
-# a live-device GDB session (see vermeer_defconfig).
+# a live-device GDB session (see socrates_defconfig).
 CONFIG_XNU_SHENG_PMGR=n
 # Off: the K70 display chain is not qualified; SimpleFbDxe publishes the UEFI
-# frame buffer (see vermeer_defconfig).
+# frame buffer (see socrates_defconfig).
 CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n
 CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
 # Off: needs build/sheng-gmu/ShengGmuSource.h from SHA-pinned Linux a6xx sources

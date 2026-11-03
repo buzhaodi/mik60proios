@@ -1,13 +1,19 @@
-# Board description of the Redmi K70 (vermeer, SM8550), read by the unixnu build driver.
-# Ported from the proven sheng (Xiaomi Pad 6S Pro) board: same SM8550 SoC, same stock UEFI
-# memory windows (uefiplat.cfg of the K70 OS1.0.x firmware confirms: UEFI FD 0xA7000000,
-# stack 0xA760D000, Display Reserved 0xB8000000+0x2B00000, identical register map).
+# Board description of the Redmi K60 Pro (socrates, SM8550), read by the unixnu build driver.
+# Ported from the vermeer (Redmi K70) bring-up board, itself ported from the proven sheng
+# (Xiaomi Pad 6S Pro) board: same SM8550 SoC. SoC-level windows (GIC 0x17100000/0x17180000,
+# UFS 0x1d84000, timebase 19.2 MHz, DRAM base 0x80000000) are shared across SM8550 boards.
+# TODO(socrates-firmware): the board-level values below are still the vermeer ones until the
+# socrates stock firmware (OS3.0.304.0.WMKCNXM) is unpacked and each is re-read from it:
+#   - [userdata] GPT geometry (sheng placeholder in vermeer, never replaced),
+#   - the UEFI FD / stack / Display Reserved windows from the socrates uefiplat.cfg,
+#   - the splash_region carveout of the socrates dtbo (ABL powers the panel down without it),
+#   - panel PCDs and the touch controller of the socrates dtbo.
 
 [board]
-name = "vermeer"
+name = "socrates"
 soc = "SM8550"
-description = "Redmi K70"
-kit = "vermeer"                    # the package/ of this repository appears as kits/vermeer in the build tree
+description = "Redmi K60 Pro"
+kit = "socrates"                   # the package/ of this repository appears as kits/socrates in the build tree
 
 # The target OS image: the unchanged iPad7,1 iPadOS 17.7.11 restore image, identical to sheng
 # (the whole qualified chain - prelink roots, trust caches, kernel args - targets this build).
@@ -26,7 +32,8 @@ fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustC
 "044-76034-038.dmg" = "b4908cde41d23e6bc05e6af51a2c9eeb00cf0f863a6a18b1600c96a3fd70414f"
 
 # The raw image for the userdata partition. TODO: replace with the GPT entry "userdata" of
-# LUN 0 read from this K70 (fastboot: `fastboot oem get-partition-info userdata` or a GPT dump).
+# LUN 0 read from this K60 Pro (fastboot: `fastboot oem get-partition-info userdata` or a GPT
+# dump). The values below are the vermeer copy of the sheng placeholder - NOT socrates data.
 [userdata]
 first_lba = 0x2f3840
 last_lba = 0x3d0abfa
@@ -37,7 +44,7 @@ windows = [
 ]
 
 [kernel]
-defconfig = "vermeer_defconfig"
+defconfig = "socrates_defconfig"
 # Archive builders of the kernel step, in order (SoC-level components, as sheng).
 # The VirtIO block/ram-block builders and their storage-binding post-processing are absent:
 # build-native-virtio-bindings.py reads build/storage-abi/interface-audit.json, which is
@@ -65,7 +72,7 @@ archives = [
 #                                   sheng compiled DTS. Neither is in a clean checkout, and the K70 GPU is a
 #                                   different instance (GMU 0x3d68000 vs 0x3d6a000, see GPU-PORT.md), so the
 #                                   sheng register set cannot be reused blindly. CONFIG_XNU_NATIVE_ADRENO is
-#                                   off until the vermeer GPU inputs are qualified on hardware.
+#                                   off until the socrates GPU inputs are qualified on hardware.
 # Disabling a feature here means its symbols are not referenced by the kernel and its archive is not a
 # link input. Re-adding a builder means first recording the evidence it verifies on hardware.
 
@@ -110,10 +117,10 @@ roots = [
 ]
 
 [firmware]
-config = "vermeer"                 # Resources/Configs/vermeer.toml in the Mu-Silicium checkout (--uefi)
-dsc = "Platforms/Xiaomi/vermeerPkg/vermeer.dsc"
-fd = "Build/vermeerPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
-preflight = ["scripts/check-vermeer.py"]
+config = "socrates"                # Resources/Configs/socrates.toml in the Mu-Silicium checkout (--uefi)
+dsc = "Platforms/Xiaomi/socratesPkg/socrates.dsc"
+fd = "Build/socratesPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
+preflight = ["scripts/check-socrates.py"]
 submodules = ["Common/Mu", "Common/Mu_OEM_Sample", "Silicium-ACPI", "Silicon/Silicium/OpensslPkg/Library/OpensslLib/openssl"]
 patches = ["Resources/MuPatches/Gic-Spurious.patch"]
 packages = [
@@ -133,13 +140,13 @@ packages = [
 
 [firmware.defines]
 ENABLE_SECUREBOOT = "1"
-DEVICE_MODEL = "vermeer"
+DEVICE_MODEL = "socrates"
 MEMORY_PROTECTION = "TRUE"
 SHIP_MODE = "FALSE"
-BUILDID_STRING = "vermeer-research"
+BUILDID_STRING = "socrates-research"
 
 [payload]
-volume = "VERMEERESP"
+volume = "SOCRATESESP"
 # 64 MiB, not 192: `fastboot boot` downloads the whole boot image into a buffer the
 # stock ABL allocates before it starts, and 198 MB of it is refused part-way through
 # the transfer ("Device sent unknown status code"). The volume really holds the
@@ -152,7 +159,7 @@ size_mib = 64
 # hundred KiB - the kernel is still the only large thing in the volume, so 64 MiB is enough for both
 # entries. Raise this only for an image that also carries an OS volume.
 size_mib_userland = 64
-userland_title = "vermeer userland: boot to the first EL0 process (rd=md0)"
+userland_title = "socrates userland: boot to the first EL0 process (rd=md0)"
 # The countdown boots the RAM root with this minimal line; the full bring-up line below stays
 # available as the "userland-full" menu entry. Reason: the full line enables dozens of hardware
 # probes (sheng-*, offline-*, armcpu-*), and on this board the kernel dies with
@@ -169,7 +176,7 @@ userland_args = [
   "kt_fixed_zones=120",
 ]
 loader = "firmware"
-title = "vermeer first boot: source 4K XNU to console"
+title = "socrates first boot: source 4K XNU to console"
 dram_size = "0x80000000"             # conservative first-boot window, as sheng
 skip_setup_tool = "scripts/seed-data-skip-setup.py"   # used by --skip-setup
 panic_screen = true
@@ -233,12 +240,12 @@ kernel_args = [
 ]
 
 [payload.adt]
-tool = "scripts/make-vermeer-adt.py"
+tool = "scripts/make-socrates-adt.py"
 chip_id = "207"
 # DarwinBoot reserves one *contiguous* run of conventional memory of this size and
 # places the kernel window inside it; the ADT value is that request, not a hint.
-# 0x130000000 (4.75 GiB, the sheng value) cannot be met on vermeer: the board runs
-# with VERMEER_VENDOR_HW = 0, so VermeerBootMemoryDxe builds the memory map itself
+# 0x130000000 (4.75 GiB, the sheng value) cannot be met on socrates: the board runs
+# with SOCRATES_VENDOR_HW = 0, so SocratesBootMemoryDxe builds the memory map itself
 # and adds at most 1 GiB below 4 GiB in pieces of 16 MiB or more. A 4.75 GiB request
 # therefore always fails with EFI_OUT_OF_RESOURCES and the loader returns to the
 # menu ("first boot does nothing"). The prelinked kernel spans 0x42f6000 (66 MiB)
@@ -258,6 +265,9 @@ unique_chip_id = "required"          # the platform seed is not stored in any re
 
 # The stock ABL powers the panel off when the device tree has no splash region. The K70 splash
 # carveout (0xb8000000 + 0x2b00000) is identical to sheng's - confirmed from the vermeer dtbo.
+# TODO(socrates-firmware): confirm the same carveout from the socrates dtbo before first boot;
+# the K60 Pro panel is also a 3200x1440 WQHD+ dual-DSI video-mode panel, but "same resolution"
+# is not evidence of the same reserved window.
 [[bootimg.dtb_node]]
 path = "/reserved-memory/splash_region"
 props = [

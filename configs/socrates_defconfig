@@ -1,7 +1,7 @@
-# Kernel configuration of the vermeer image. CONFIG_XNU_<NAME> becomes XNU_<NAME> for the kernel build.
+# Kernel configuration of the socrates image. CONFIG_XNU_<NAME> becomes XNU_<NAME> for the kernel build.
 #
-# Bring-up profile for the Redmi K70: the SM8550 SoC components below (UFS/AES/Adreno/ArchTimer)
-# are the same as sheng. The verified-root chain of sheng is deliberately off: its block-storage
+# Bring-up profile for the Redmi K60 Pro: the SM8550 SoC components below (UFS/AES/Adreno/ArchTimer)
+# are the same as sheng and vermeer. The verified-root chain of sheng is deliberately off: its block-storage
 # bindings are qualified from a live-device observation (build/storage-abi/interface-audit.json,
 # recorded from build/darwinboot-storage-native-metadata/gdb-stop.json), and its verified bundles
 # need volume policies outside the repositories, so a clean CI checkout cannot reproduce them.
@@ -37,7 +37,7 @@ CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n
 # exists, and prepare-sheng-gmu.py generates that header from SHA-pinned Linux a6xx sources plus the
 # compiled sheng DTS. Neither is in a clean checkout, and the K70 GMU window (0x3d68000) differs from
 # sheng's (0x3d6a000), so the sheng register set is not valid here. Re-enable together with a
-# vermeer-specific GPU input set.
+# socrates-specific GPU input set.
 CONFIG_XNU_NATIVE_ADRENO=n
 
 # Off until the live storage metadata observation is recorded on this device.
