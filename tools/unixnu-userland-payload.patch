@@ -1,0 +1,122 @@
+diff --git a/scripts/unixnu/cli.py b/scripts/unixnu/cli.py
+index 7b497b0..101d3ce 100644
+--- a/scripts/unixnu/cli.py
++++ b/scripts/unixnu/cli.py
+@@ -36,6 +36,8 @@ def common():
+     p.add_argument('--skip-setup', action='store_true', help='mark Setup as done in the Data seed, so the Hello pages are skipped (needs --data-ramdisk; optional)')
+     p.add_argument('--data-ramdisk', metavar='FILE', help='preserved Data ramdisk seed for this installation')
+     p.add_argument('--init-data', action='store_true', help='create and retain a new Data seed from the IPSW for a FIRST installation; requires kernel build')
++    p.add_argument('--userland', metavar='FILE', help='root image handed to XNU in RAM: the payload carries it as an initrd, the ADT keeps a '
++                                                      '/chosen/memory-map RAMDisk placeholder, and a second boot entry passes rd=md0')
+     p.add_argument('--gpu-addon', metavar='FILE', help='GPU addon file (scripts/make-gpu-addon.py) the kernel writes into the Data volume at boot')
+     p.add_argument('--unique-chip-id', metavar='HEX', help='platform seed for the device tree; or UNIXNU_UNIQUE_CHIP_ID')
+     p.add_argument('--ipsw', metavar='PATH_OR_URL', help='the target IPSW: a local file or an https URL (default: url of board.toml [ipsw]); or UNIXNU_IPSW')
+diff --git a/scripts/unixnu/payload.py b/scripts/unixnu/payload.py
+index 0774c8e..3f2d87a 100644
+--- a/scripts/unixnu/payload.py
++++ b/scripts/unixnu/payload.py
+@@ -2,10 +2,11 @@
+ 
+ The volume is what UniXNU reads at boot: its config, the kernel Mach-O (optionally with the panic
+ screen patched into a copy), the device tree sidecar the board script generates, and optionally the
+-trust cache and the Data ramdisk seed. The loader (DarwinBoot) is part of the firmware volume.
++trust cache, the Data ramdisk seed and a root image that XNU mounts from RAM. The loader (DarwinBoot)
++is part of the firmware volume.
+ 
+ Inputs that are not in a repository are options: the prelinked kernel (default: the output of
+-"build kernel"), --trust-cache, --data-ramdisk and the platform seed --unique-chip-id.
++"build kernel"), --trust-cache, --data-ramdisk, --userland and the platform seed --unique-chip-id.
+ The volume is written with mtools, without mounting, so it is the same on every run.
+ """
+ import hashlib
+@@ -129,6 +130,12 @@ def build(ctx, kernel=None):
+     check_data_input(ctx, data)
+     if data and not data.is_file():
+         raise Error(f'Data ramdisk not found: {data}')
++    # A root image XNU mounts from RAM: DarwinBoot loads it as the entry initrd and writes its physical
++    # range into /chosen/memory-map:RAMDisk, IOKitBSDInit turns that into /dev/md0, and the second entry
++    # passes rd=md0 so vfs_mountroot() tries every filesystem's mountroot against it.
++    userland = expand(args.userland) if getattr(args, 'userland', None) else None
++    if userland and not userland.is_file():
++        raise Error(f'userland image not found: {userland}')
+     if getattr(args, 'skip_setup', False):
+         if not data:
+             raise Error('--skip-setup edits the Data seed: pass the original one with --data-ramdisk FILE')
+@@ -188,6 +195,8 @@ def build(ctx, kernel=None):
+         shutil.copyfile(policies, payloads / 'kernel.macho.vroot')
+     if data:
+         shutil.copyfile(data, payloads / 'scratch-data.img')
++    if userland:
++        shutil.copyfile(userland, payloads / 'userland.img')
+     if ctx.schema_version == 2:
+         from .devicetree import compile_hardware, generate
+         dtb = compile_hardware(ctx)
+@@ -204,6 +213,8 @@ def build(ctx, kernel=None):
+             command += ['--unique-chip-id', seed]
+         if data:
+             command.append('--packed-data-ramdisk' if adt.get('packed_data_ramdisk') else '--data-ramdisk')
++        if userland:
++            command.append('--ramdisk')
+         if trust:
+             command.append('--trust-cache')
+         if addon:
+@@ -220,9 +231,36 @@ def build(ctx, kernel=None):
+         run(command, cwd=ctx.tree, env=dict(os.environ, UNIXNU_UEFI=str(ctx.uefi or '')), log_file=ctx.logs / 'payload-adt.log')
+     initrd = 'initrd = "Payloads/scratch-data.img"\n' if data else ''
+     loader = '' if spec.get('loader', 'firmware') == 'firmware' else '[[driver]]\npath = "Payloads/DarwinBoot.efi"\n'
+-    config = (f'version = 1\n[boot]\ntimeout = {spec.get("timeout", 3)}\ndefault = "xnu"\n[kits]\nautoload = false\n{loader}'
++    # The RAM root is a second entry, not a change to the first: the console profile stays on the menu,
++    # and rd=md0 only makes sense once the loader has put a root image where the tree says it is.
++    userland_entry = ''
++    default_id = 'xnu'
++    if userland:
++        title = spec.get('userland_title', 'userland: root image from RAM (rd=md0)')
++        root_args = check_args(list(arguments) + ['rd=md0'])
++        # The board may carry a second, minimal argument line for the RAM root. The full bring-up line
++        # switches on dozens of hardware probes (sheng-*, offline-*), and each probe is a chance to touch
++        # an MMIO address this board does not answer. A synchronous external abort in the kernel is
++        # indistinguishable from "the root filesystem was refused" unless one entry leaves the probes off,
++        # so the minimal line is what the countdown boots and the full line stays one keypress away.
++        minimal = spec.get('userland_args')
++        entries = []
++        if minimal:
++            min_args = check_args(list(minimal) + ['rd=md0'])
++            entries.append(f'[[entry]]\nid = "userland"\ntitle = "{title}"\n'
++                           f'type = "xnu"\npath = "Payloads/kernel.macho"\ninitrd = "Payloads/userland.img"\nargs = "{min_args}"\n')
++            full_id = 'userland-full'
++        else:
++            full_id = 'userland'
++        entries.append(f'[[entry]]\nid = "{full_id}"\ntitle = "{title} [full probe args]"\n'
++                       f'type = "xnu"\npath = "Payloads/kernel.macho"\ninitrd = "Payloads/userland.img"\nargs = "{root_args}"\n')
++        userland_entry = ''.join(entries)
++        # A boot that carries a root image is a boot into userspace, so it is what the countdown should
++        # pick. The console entry stays one keypress away for the bring-up case where the root is refused.
++        default_id = 'userland'
++    config = (f'version = 1\n[boot]\ntimeout = {spec.get("timeout", 3)}\ndefault = "{default_id}"\n[kits]\nautoload = false\n{loader}'
+               f'[[entry]]\nid = "xnu"\ntitle = "{spec.get("title", "UniXNU")}"\ntype = "xnu"\npath = "Payloads/kernel.macho"\n{initrd}'
+-              f'args = "{line}"\n')
++              f'args = "{line}"\n{userland_entry}')
+     install = spec.get('install')
+     if install:
+         if not data:
+@@ -244,6 +282,10 @@ def build(ctx, kernel=None):
+     for path in [stage, *stage.rglob('*')]:
+         os.utime(path, (EPOCH, EPOCH))
+     size = int(spec.get('size_mib', 192))
++    # A RAM root makes the volume a kernel plus a whole filesystem, so the board may declare a larger
++    # volume for that entry only; the console payload keeps its own (small) size.
++    if userland:
++        size = int(spec.get('size_mib_userland', size))
+     content = sum(p.stat().st_size for p in stage.rglob('*') if p.is_file())
+     if content > size * 1024 * 1024 * 0.95:
+         raise Error(f'the payload files take {content >> 20} MiB; raise size_mib (now {size}) in board.toml [payload]')
+@@ -252,7 +294,8 @@ def build(ctx, kernel=None):
+                    'adt_sha256': sha256_file(payloads / 'kernel.macho.adt'), 'kernel_args': line,
+                    'trust_cache_sha256': sha256_file(trust) if trust else None, 'gpu_addon_sha256': sha256_file(addon) if addon else None,
+                    'data_ramdisk_sha256': sha256_file(data) if data else None, 'skip_setup': bool(getattr(args, 'skip_setup', False)), 'panic_screen': bool(spec.get('panic_screen')),
+-                   'payload_sha256': sha256_file(image), 'payload_bytes': image.stat().st_size, 'hardware_tested': False}
++                   'payload_sha256': sha256_file(image), 'payload_bytes': image.stat().st_size, 'hardware_tested': False,
++                   'userland_sha256': sha256_file(userland) if userland else None}
+     report.write_text(json.dumps(data_report, indent=2) + '\n')
+     shutil.rmtree(stage)
+     log(f'payload: {image} ({image.stat().st_size >> 20} MiB)')

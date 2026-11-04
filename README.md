@@ -15,11 +15,11 @@
 | XNU 内核首启到 console（vm_init 完成） | ✅ | 2026-11-04 |
 | AMFI 关卡突破（provider-less ApplePMGRNub 桥） | ✅ | 2026-11-04 |
 | **内核完整引导链直到 `Failed to mount root device`**（无存储阶段的预期终点） | ✅ | 2026-11-04 |
-| 首个 EL0 用户态进程（RAM root） | ⬜ 下一步 |  |
+| **首个 EL0 用户态进程（RAM root：rd=md0 + mockfs）** | 🔶 镜像就绪，待上机 | 2026-11-05 |
 | UFS 存储阶段（"系统装上了"） | ⬜ |  |
 | GPU / 显示 / 触摸 | ⬜ |  |
 
-进度估约 **30%**（以"SpringBoard 桌面跑起来"为 100%）。
+进度估约 **40%**（以"SpringBoard 桌面跑起来"为 100%）。
 
 ## 仓库结构
 
@@ -39,19 +39,50 @@ mik60proios/
 ## 快速开始（不用编译）
 
 1. 手机解 BL 锁。
-2. 下载 `prebuilt/boot-pmgrlate-boot.img`。
+2. 下载 `prebuilt/boot-userland-boot.img`（RAM root 里程碑）或 `prebuilt/boot-pmgrlate-boot.img`（上一里程碑参照）。
 3. **先完整开机进一次 Android**（详见下方"测试协议"）。
 4. ```bash
    adb reboot bootloader
-   fastboot boot boot-pmgrlate-boot.img
+   fastboot boot boot-userland-boot.img
    ```
-5. 屏幕依次出现：绿色条（loader handoff）→ 蓝条（内核入口探针）→ 红紫条（MMU 开启探针）→ ……最终停在：
+5. 屏幕依次出现：**启动菜单（倒计时 3 秒，默认高亮 `socrates userland: boot to the first EL0 process (rd=md0)`，什么都不按就走它）** → 绿色条（loader handoff）→ 蓝条（内核入口探针）→ 红紫条（MMU 开启探针）→ `-v` 内核日志向上滚（中央有 XNU 原生白色齿轮转圈：`-progress` 引导参数点亮内核自带的 Apple 开机素材）→ mockfs 把 `md0` 挂成根 → **PID 1 用户态 banner**：
 
    ```
-   Failed to mount root device @IOKitBSDInit.cpp:984
+   ==================================================
+    socrates userland  pid=1 ppid=0 uid/euid: 0/0
+   ==================================================
+   （sysctl 探针：核数 / 页大小 / 内存 / 内核版本串）
+   （1 MiB 匿名内存逐页写入读回校验 —— EL0 的 VM 通路）
+   （/probe.bin 读回 motd —— 根是真文件系统的证据）
+   hb: tick ... （心跳进程）
    ```
 
-   **这不是错误**——这是没有存储设备时内核引导链的预期终点（AMFI 已通过，root 卷不存在）。
+   之后是壳（没键盘会提示 `connect a keyboard or the ... driver`）——**见到 banner 就是本里程碑的通关标志**。
+
+   > 上一里程碑的终点（`Failed to mount root device` 定屏）仍然一步可达：菜单倒计时里按上/下键选 `socrates first boot: source 4K XNU to console` 条目。
+
+## RAM root 用户态镜像：里面装了什么
+
+`boot-userland-boot.img` 与上机验证过的 `boot-pmgrlate-boot.img` **除 payload 卷外逐字节相同**（FD `a3741876…`、DTB 表 `5c731bfe…`、内核段 `e5909857…` 全部同 sha，复现脚本里从上一镜像原样解出 FD 再打包）。变化全在 64 MiB 的 FAT 卷里：
+
+| 卷内 | 作用 |
+| --- | --- |
+| `Payloads/userland.img` | **N4KROOT 容器**（64 KiB）：`launchd.macho`（静态 arm64 Mach-O，PID 1 本体，ad-hoc 签名）@4096 + `motd.txt` @61440。内核的 mockfs（`patches/xnu/mockfs-test-file.patch`）把它呈现成 `/sbin/launchd` 和 `/probe.bin` |
+| `Payloads/kernel.macho.trustcache` | 本 userland 的 cdhash 信任缓存（`--owner-trust-cache` 传入，绕过 sheng 白名单），AMFI 靠它放行 PID 1 |
+| `unixnu.toml` | 菜单：`userland`（**默认**，最小参数行 + `rd=md0`）、`userland-full`（完整探针参数行 + `rd=md0`）、`xnu`（上一里程碑原样保留） |
+
+引导链（全部 stock/既有代码）：菜单条目 `initrd` → DarwinBoot 把 userland.img 拷进保留窗口并写进 ADT `/chosen/memory-map:RAMDisk` → XNU `IOKitBSDInit` 发布 `/dev/md0` → `rd=md0` 选根 → `vfs_mountroot` 里 mockfs 挂载 → `load_init_program()` `execve("/sbin/launchd")` → **EL0**。
+
+**构建 CLI 的缺口与补丁**：`unixnu build payload --userland` 不在上游 main（c1ecc5b）里——它在 vermeer 移植者的 fork（`yyx2025/UniXNU@vermeer-fix`），但那个 fork 基于老上游，不能整分支拉。补丁按 hunk 移植到我们的检出上，固化在仓里：
+
+```bash
+bash tools/apply-unixnu-userland-patch.sh <你的 UniXNU 检出>   # 幂等
+bash repro/build-userland-boot.sh                             # WSL 内端到端复现本镜像
+```
+
+**为什么默认条目用最小参数行**：完整参数行会打开几十个硬件探针（sheng-*/offline-*），本板会撞出 same-EL data abort（见 board.toml 注释）。最小行 + `rd=md0` 把"板子受不了探针"和"RAM 根挂不上"两个问题分开；完整行留在 `userland-full` 一键之遥。
+
+**`-progress` 是什么**：iOS 系内核默认不画启动画面（`pexpert/arm/pe_init.c: show_progress = FALSE`），此参数点亮内核编译内置的 `gGearPict` 白色齿轮素材——本板能见到的最接近苹果真机开机的画面。它只是画面，不影响引导逻辑；若首测异常，去掉这一个参数即可隔离。
 
 ## 完整复现
 
@@ -129,6 +160,15 @@ python3 unixnu build firmware --uefi ~/unixnu-work/uefi-socrates -D ../UniXNU-so
 python3 unixnu build payload --uefi ~/unixnu-work/uefi-socrates -D ../UniXNU-socrates \
     --unique-chip-id 0000000000000001
 
+# 3.6b RAM-root 用户态变体（首个 EL0 里程碑）：上游 CLI 没有 --userland，
+#     先应用移植补丁，再编 userland，带上它重打卷（端到端见 repro/build-userland-boot.sh）
+bash mik60proios/tools/apply-unixnu-userland-patch.sh ~/unixnu-work/UniXNU
+bash ../UniXNU-socrates/userland/build.sh ../UniXNU-socrates/userland-build
+python3 unixnu build payload --uefi ~/unixnu-work/uefi-socrates -D ../UniXNU-socrates \
+    --userland ../UniXNU-socrates/userland-build/userland.img \
+    --owner-trust-cache ../UniXNU-socrates/userland-build/kernel.macho.trustcache \
+    --unique-chip-id 0000000000000001
+
 # 3.7 DTB 守卫注入：往 8 块 vendor DTB 里注入 splash 和 XPU 保护节点后拼接
 bash mik60proios/tools/inject-nodes.sh   # 产物 out/socrates-all-dtbs.dtb
 
@@ -185,6 +225,8 @@ fastboot boot out/boot.img
 # 电脑端（115200 8N1）：
 python -m serial.tools.miniterm COM3 115200
 ```
+
+> **注意**：`uefi-socrates` 的 `Build/` 目录里当前留的是**串口版** FD（dsc 标志已改回 0，但最后一次固件构建是串口构建做的）。要再产屏幕版 FD，重跑 `unixnu build firmware`；或者照 `repro/build-userland-boot.sh` 那样，从已验证镜像里把原版 FD（sha `a3741876…`）原样解出来打包。
 
 ### 判读
 

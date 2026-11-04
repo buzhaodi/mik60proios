@@ -190,6 +190,11 @@ userland_title = "socrates userland: boot to the first EL0 process (rd=md0)"
 # "the board cannot take these probes" from "the RAM root itself does not mount".
 userland_args = [
   "-v",
+  # XNU stock boot progress: on iOS-family targets it stays off unless this flag is present
+  # (pexpert/arm/pe_init.c: show_progress = FALSE; PE_parse_boot_argn("-progress", ...)).
+  # PE_init_iokit spins the kernel-built-in gGearPict art (white gear, no ADT asset needed)
+  # over the console text - the closest this board gets to an Apple boot screen.
+  "-progress",
   "serial=3",
   "debug=0x14e",
   "kt_fixed_zones=120",

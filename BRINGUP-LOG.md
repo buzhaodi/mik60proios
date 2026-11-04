@@ -118,7 +118,87 @@ Failed to mount root device @IOKitBSDInit.cpp:984
 
 ## 6. 复现战果的镜像
 
-`prebuilt/boot-pmgrlate-boot.img`（72 MB，v0，内核 sha `de368b67...`）：
+`prebuilt/boot-pmgrlate-boot.img`（72 MB，v0，boot.json `kernel_sha256 e5909857...`，卷内内核为当时构建的探针版）：
 ```
 fastboot boot boot-pmgrlate-boot.img    # 前置：先进一次 Android！
 ```
+
+`prebuilt/boot-userland-boot.img`（72 MB，v0，2026-11-05，首个 EL0 里程碑）：FD/DTB/内核段与上机验证过的
+boot-pmgrlate **逐字节同 sha**，只有 payload 卷换了——多一个 `Payloads/userland.img`（N4KROOT 容器，内含
+ad-hoc 签名的静态 `launchd.macho`，cdhash `d9ea65f7...`）和它自己的信任缓存，菜单多出 `userland`（默认）
+与 `userland-full` 两条目。
+```
+fastboot boot boot-userland-boot.img    # 前置：先进一次 Android！
+```
+
+---
+
+## 7. RAM root → 首个 EL0 进程：整条链路都是现成的，缺的只有 CLI 一个参数
+
+### 7.1 内核侧零改动（取证）
+
+- 现役内核（`out/socrates/kernel/kernel.macho`，源 sha `668c0eb5...`）**早就编进了 mockfs + N4KROOT**：
+  二进制里有 `N4KROOT` magic、`mockfs_mountroot`、`mockfs_readonly_open`（test-file 补丁独有）、
+  `failed to destroy test node`（同上）、`load_init_program`。机制：`build-xnu-4k-baseline.sh:51` 把
+  `patches/xnu/*.patch` 整个 glob 进 `.cache/xnu-work`，`build-mockfs-fixture.py` 从打过补丁的源码编出
+  fixture 并 `force_load`（`CONFIG_XNU_SOURCE_MOCKFS=y`）。
+- **诚实记录一条谱系**：上机验证"Failed to mount root"的镜像（11-04 22:35 打包）用的 payload 内核是
+  `d16b0027...`；WSL 树里的内核是 23:32 串口阶段顺手做的一次**增量重编**（源状态、板仓内容、工具链相同，
+  字节不同）。本里程碑镜像采用现树内核。两个内核做了逐项符号取证（mockfs/N4KROOT/test-file/PMGR 桥/
+  齿轮素材/探针三色条/panic 屏）**全部一致**；且探针补丁被证明是确定性的——同一 kernel.macho 两次
+  payload 构建打出同一个 `payload_kernel_sha256 86574694...`。风险定性：同源重编的字节漂移，非功能变更。
+
+### 7.2 唯一的缺口：`build payload --userland` 不在上游 CLI
+
+上游 main（c1ecc5b）的 `scripts/unixnu/{cli,payload}.py` 没有 userland 支持；它在 vermeer 移植者的 fork
+（`yyx2025/UniXNU@vermeer-fix`，board 仓 userland.yml 里 pin 的就是它）。但 fork 基于老得多的上游（没有
+schema-2/release 那批），**不能整分支拉**——那会污染已经真机验证过的内核构建。做法：读 fork 的两个文件，
+把 userland 的 hunk 移植到我们的检出上（cli.py +2 行；payload.py 五处：userland 校验、staging、ADT
+`--ramdisk`、菜单条目 userland/userland-full/默认项、size_mib_userland、报告字段）。
+补丁固化：`tools/unixnu-userland-payload.patch` + `tools/apply-unixnu-userland-patch.sh`（幂等），
+Windows 与 WSL 两个 UniXNU 检出都应用。
+
+下游链路一行没改、全部现成：UniXNULib 的条目 `initrd` 字段（Config.c）→ DarwinBoot 校验/拷贝 ramdisk 并
+把物理区间写进 ADT 占位符（DarwinBoot.c）→ `IOKitBSDInit` 发 `/dev/md0` → `rd=md0` → `vfs_mountroot`
+里 mockfs 挂载 → `load_init_program()` exec `/sbin/launchd`。
+
+### 7.3 两个非显然的坑
+
+1. **FD 是串口版**：`uefi-socrates/Build/` 里的产物是串口构建留下的（sha `25ca7734...` == prebuilt-test
+   `boot-serial.img` 的 `fd_sha256`；dsc 标志早已改回 0 但 Build 没重跑）。直接打包会把没上机验证过的串口
+   固件带进里程碑镜像。修法：从 `prebuilt/boot-pmgrlate-boot.img` 的内核段（gzip）里**原样解出**上机
+   验证过的 FD（192 字节 BootShim 后 3,145,728 字节，sha `a3741876...` 逐字节比对通过）用 `--fd` 传给
+   bootimg。效果：新镜像的内核段/FD/DTB 与上机镜像逐字节同 sha——**变量只剩 payload 卷本身**。
+2. **ADT 每次构建都不同**：`make-socrates-adt.py` 往 `/chosen` 写 `random-seed = os.urandom(64)`——
+   所以 `payload_sha256`/`adt_sha256` 每次构建必然不同，这是熵，不是构建漂移。结构验证改用重放对比：
+   同参数带/不带 `--ramdisk` 各构建一次 ADT，差异恰好是 `RAMDisk` 属性（+52 字节）；卷内 ADT 与重放件
+   逐字节 diff 只有那 64 字节随机种子。
+
+### 7.4 `-progress`（"苹果启动画面"能做到的极限）
+
+XNU 在 iOS 系目标默认 `show_progress = FALSE`（`pexpert/arm/pe_init.c:296-298`），`-progress` 引导参数
+打开后 `PE_init_iokit` 用内核编译内置的 `gGearPict` 素材在屏中央转白色齿轮（素材在两个内核里都取证到）。
+它只是画面、不影响引导逻辑；只加在默认 `userland` 条目的参数行里，真出问题去掉一个参数即可隔离。
+SpringBoard 真桌面本阶段不可行（APFS 块设备/Apple 签名链/SEP keybag 全缺），userland README 自己就写明了。
+
+### 7.5 主机侧验证链（全过）
+
+| 检查 | 结果 |
+| --- | --- |
+| `userland/test-adhoc.py`（签名器自检 14 项） | all passed |
+| `tools/verify-userland-artifacts.py`（容器头/Mach-O 静态无 dyld/签名/信任缓存==cdhash/类别字节/大小） | PASS |
+| payload：unixnu.toml 默认=`userland`，args=`-v -progress serial=3 debug=0x14e kt_fixed_zones=120 sheng-pmgr=2 rd=md0` | ✓ |
+| payload：卷内 4 个 Payloads 文件 + toml，内容 51.1 MiB / 64 MiB | ✓ |
+| payload：`kernel_sha256 668c0eb5...` 未动、`payload_kernel_sha256 86574694...` 与上一构建一致 | ✓ |
+| payload：ADT 含 `RAMDisk`+`TrustCache` 16 字节占位符（重放对比取证） | ✓ |
+| boot.img：kernel 段 `e5909857...` / FD `a3741876...` / DTB `5c731bfe...` 与上机镜像逐字节同 | ✓ |
+| boot.img：ramdisk 段 == payload.img（`709fddac...`），总 72,032,256 B | ✓ |
+
+### 7.6 上机判读（做完实验回填本节）
+
+- **通关标志**：`-v` 日志后出现 userland banner（双线框 + PID/UID + sysctl 探针 + 1 MiB 内存校验 +
+  `/probe.bin` motd）+ 心跳 tick。这就是"内核把 PID 1 拉起来、AMFI 放行、mockfs 根成立"的四合一证据。
+- 回到菜单 = 窗口/参数问题（屏上找 `NO WINDOW`）；停在 `Failed to mount root device` = `rd=md0`
+  没吃进去（查 ADT RAMDisk 占位符被 loader 填了没有）；panic 文字 = 直接线索；"花纹" = pre-console panic。
+- 菜单里 `userland-full` 是**已知会 ASSERT 的对照项**（完整探针行撞 same-EL data abort，见 board.toml
+  注释）——不要拿它做首测；`xnu` 条目是上一里程碑的一键复现。

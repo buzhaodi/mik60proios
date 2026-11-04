@@ -31,3 +31,6 @@ wsl-copy/
 .idea/
 Thumbs.db
 desktop.ini
+
+# ZCode 会话产物（计划文件等）
+.zcode/
