@@ -60,7 +60,7 @@ Mu-Silicium 需要 SEC 先切 SP_ELx（沿用）；`Resources/MuPatches/Gic-Spur
 | SoC | SM8550（`ro.soc.model`，`ro.board.platform=kalama`） |
 | 内核 | Linux 5.15.194-android13（ab15212794） |
 | root | 无（Magisk 30.7 应用在装，未打补丁进 boot） |
-| 串号 | e5945880 |
+| 串号 | （已隐去） |
 
 ### 3.2 SoC 级（SM8550，与 sheng/vermeer 共享，出自 `UniXNU-sm8550-common`）
 
