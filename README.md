@@ -163,6 +163,34 @@ fastboot boot out/boot.img
 | "任意镜像都重启"假象 | 崩溃后手机引导环境被污染 | 每次测试前先进一次 Android |
 | "裁剪参数也重启"假象 | 完整参数行里的开关（`sheng-touch=0` 等）是必需品，内核默认路径会踩硬件 | kernel_args 逐字保留，不做裁剪实验 |
 
+## 串口调试（首次上机前必读）
+
+固件里已内置 GENI SE7 调试串口驱动（`SOCRATES_SERIAL_CONSOLE = 1` 时启用），
+但**首次默认关闭**（保持屏幕输出不破坏现有测试）。要测串口：
+
+### 硬件：小米 Type-C 调试线
+
+红米 K60 Pro 的调试串口不在普通 Type-C 的数据线上——需要**小米工程调试线**
+（淘宝/闲鱼搜"小米串口调试线 Type-C"或"Xiaomi UART cable"，20~40 元），
+它把 SE7 UART 的 TX/RX 引到 USB-UART 芯片。**注意电平是 1.8V**，
+线内已带转换则直接 USB 插电脑；自制的话需要一个 1.8V 容忍的 USB-UART 适配器。
+
+### 软件
+
+```bash
+# 打开串口（固化在 socrates.dsc 的 SOCRATES_SERIAL_CONSOLE）
+# 然后 unixnu build firmware + bootimg 重打包
+# 或者直接用 prebuilt-test/boot-serial.img
+
+# 电脑端（115200 8N1）：
+python -m serial.tools.miniterm COM3 115200
+```
+
+### 判读
+
+- UEFI 阶段的每一行 DEBUG() 都从串口出（菜单、进度条、panic 屏依然在屏幕上）
+- 内核阶段日志需要 `serial=3` 引导参数已默认在——内核侧的 GENI 驱动是下一步
+
 ## 已知限制与未解事项
 
 - `dtbo` 叠加固定选 entry 0（babylon overlay 非 socrates 板）——内核阶段需要离线合并处理
