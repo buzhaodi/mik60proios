@@ -103,6 +103,9 @@ CollectReg (
       Ranges[Count].Base = Base;
       Ranges[Count].End  = Base + Size;
       Count++;
+      // bring-up evidence: every reg the firmware sees, so an injected guard
+      // node is visible on the console before anything can crash on its absence
+      DEBUG ((DEBUG_ERROR, "SocratesMEM: reg 0x%lx+0x%lx\n", Base, Size));
     }
   }
 
@@ -454,6 +457,9 @@ SocratesBootMemoryDxeEntry (
   }
 
   Dtb = *(UINT64 *)GET_GUID_HOB_DATA (Hob);
+  // the raw x0 the previous stage handed over, printed BEFORE any read of it -
+  // if the tree lives at an inaccessible address the console still shows where
+  DEBUG ((DEBUG_ERROR, "SocratesMEM: dtb x0 = 0x%lx\n", Dtb));
   if ((Dtb == 0) || ((Dtb & 3) != 0) || (FdtCheckHeader ((VOID *)(UINTN)Dtb) != 0)) {
     DEBUG ((DEBUG_ERROR, "SocratesMEM: x0 0x%lx is not a device tree\n", Dtb));
     return EFI_SUCCESS;

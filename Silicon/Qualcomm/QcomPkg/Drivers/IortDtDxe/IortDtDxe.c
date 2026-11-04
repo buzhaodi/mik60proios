@@ -43,7 +43,11 @@ DiscoverDt (
   IN EFI_HANDLE        ImageHandle,
   IN EFI_SYSTEM_TABLE *SystemTable)
 {
-  EFI_MEMORY_REGION_DESCRIPTOR XblDtRegion;
+  // zero-initialised: a failed lookup must leave an empty descriptor, not the
+  // previous stack content (socrates first boot: the leftover value was
+  // 0xD8000000 and the magic scan below died on it as a synchronous external
+  // abort, FAR 0xD8000000, ESR 0x96000010)
+  EFI_MEMORY_REGION_DESCRIPTOR XblDtRegion = {0};
 
   // Locate XBL DT Memory Region
   for (UINT8 i = 0; i < ARRAY_SIZE (XblDtMemoryName); i++) {
