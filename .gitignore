@@ -6,7 +6,12 @@ __pycache__/
 *.pyc
 
 # ---- 官方固件与提取物（约 8.4 GB，产权归小米，请自行下载）----
-firmware/
+firmware/*.tgz
+firmware/extracted/
+firmware/vendor_boot.img
+firmware/base_dtb/
+firmware/vendor_dtbs/
+firmware/uefi_extract/
 vendor_boot.img
 boot.img.orig
 *.tgz

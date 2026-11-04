@@ -1,0 +1,24 @@
+##
+#  Redmi K60 Pro (socrates) package definitions.
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  DEC_SPECIFICATION              = 0x00010005
+  PACKAGE_NAME                   = SocratesPkg
+  PACKAGE_GUID                   = 5B6D3D3E-4D4F-4C74-9E90-2A20F3B7B101
+  PACKAGE_VERSION                = 0.1
+
+[Guids]
+  gSocratesPkgTokenSpaceGuid     = { 0x7A9D26A4, 0x5C3E, 0x4C36, { 0x8D, 0x9C, 0x44, 0x88, 0x3A, 0x21, 0xF5, 0x07 } }
+
+[PcdsFixedAtBuild]
+  ##
+  #  Base address of the debug UART (QUPv3 SE7, "qcom,geni-debug-uart",
+  #  measured from the stock OS3.0.304.0.WMKCNXM device tree:
+  #  /soc/qcom,qupv3_1_geni_se@ac0000/qcom,qup_uart@a9c000, the same UART the
+  #  stock XBL console uses - its clocks and pinmux are already set when this
+  #  firmware runs).
+  ##
+  gSocratesPkgTokenSpaceGuid.PcdDebugUartPortBase|0x00A9C000|UINT64|0x0000C400

@@ -47,6 +47,14 @@
   #
   SOCRATES_CHINESE_UI             = 1
 
+  #
+  # 1 = DebugLib 输出走 GENI SE7 调试串口（0xA9C000，qcom,geni-debug-uart，
+  # XBL console 同款，时钟/引脚已由 XBL 配好），接小米 Type-C 调试线看全量日志。
+  # 0 = 保持 FrameBufferSerialPortLib（输出画屏幕，不需要任何硬件）。
+  # 接线：TX=TLMM 引脚见 dtb qupv3_se7_2uart_pins，RX 对应引脚，电平 1.8V。
+  #
+  SOCRATES_SERIAL_CONSOLE         = 0
+
 !include KailuaPkg/KailuaPkg.dsc.inc
 
 !if ($(USE_CUSTOM_DISPLAY_DRIVER) == 1) && ($(SOCRATES_VENDOR_HW) == 0)
@@ -106,6 +114,16 @@
   # Memory Libraries
   #
   MemoryMapLib|socratesPkg/Library/MemoryMapLib/MemoryMapLib.inf
+
+!if $(SOCRATES_SERIAL_CONSOLE) == 1
+  #
+  # The GENI SE7 debug UART (0xA9C000, the stock XBL console port).
+  # DebugLib -> BaseDebugLibSerialPort -> SerialPortLib, so every DEBUG()
+  # leaves through the Type-C debug cable. Screen output (GOP menu, kernel
+  # progress bars, panic screen) is untouched - those do not use SerialPortLib.
+  #
+  SerialPortLib|socratesPkg/Library/SerialPortLib/SerialPortLib.inf
+!endif
 
   #
   # QCOM Libraries
