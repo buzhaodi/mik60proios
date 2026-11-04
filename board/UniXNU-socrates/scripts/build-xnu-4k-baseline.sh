@@ -41,6 +41,9 @@ fi
 # byte order with LC_ALL=C. zzyb and zzyc (upstream additions after the vermeer era) join the
 # pre-reversal so a re-run on a patched tree stays idempotent.
 export LC_ALL=C
+# socrates PMGR: restore the sheng_pmgr_run block to its patched position
+# before the series re-applies (see scripts/mgr-call-site.py).
+python3 scripts/mgr-call-site.py restore
 for LATE_PATCH in "$ROOT/patches/xnu/zzz-boot-progress.patch" "$ROOT/patches/xnu/zzyc-owner-skip-launch-constraints.patch" \
     "$ROOT/patches/xnu/zzyb-native-cryptex-os-view.patch" "$ROOT/patches/xnu/zzy-staged-system-apps.patch" \
     "$ROOT/patches/xnu/zzy-native-gpu-addon-mount.patch"; do
@@ -54,37 +57,10 @@ for PATCH in "$ROOT"/patches/xnu/*.patch "$ROOT"/kits/NativePrelink/patches/*.pa
     git -C .cache/xnu-work apply "$PATCH"
   fi
 done
-# socrates: the sheng-platform-power patch places sheng_pmgr_run right after
-# bsd_bufferinit, which on this board is BEFORE IOKitBSDInit - the IORegistry
-# platform does not exist yet and every panic in that window paints garbage
-# (the console is not attached either; first-boot hardware evidence
-# 2026-11-04). Move the block to just before IOKitBSDInit: the platform and
-# the console are up there, and the nub is registered before the IOKit
-# matching that AMFI waits in.
-python3 - <<'PMGR_MOVE'
-import re
-p = '.cache/xnu-work/bsd/kern/bsd_init.c'
-s = open(p).read()
-block_re = re.compile(
-    r'\n#if defined\(XNU_SHENG_PMGR\) && XNU_SHENG_PMGR\n'
-    r'\textern void sheng_pmgr_run\(void\);\n'
-    r'\tboot_progress_stage\("original PMGR nub start"\);\n'
-    r'\tsheng_pmgr_run\(\);\n'
-    r'\tboot_progress_stage\("original PMGR nub returned"\);\n'
-    r'#endif\n')
-m = block_re.search(s)
-if m:
-    s = s[:m.start()] + '\n' + s[m.end():]
-    anchor = '\tkern_return_t result = IOKitBSDInit();'
-    assert s.count(anchor) == 1, 'expected exactly one IOKitBSDInit call'
-    s = s.replace(anchor, m.group(0).strip('\n') + '\n\t/* moved here from after bsd_bufferinit: pre-IOKit the registry\n\t * platform does not exist and panics cannot paint (see build script) */\n' + anchor)
-    open(p, 'w').write(s)
-    print('sheng_pmgr_run moved to just before IOKitBSDInit')
-else:
-    assert 'original PMGR nub start' in s and s.index('original PMGR nub start') < s.index('IOKitBSDInit()'), \
-        'PMGR block neither at the old site nor before IOKitBSDInit'
-    print('sheng_pmgr_run already before IOKitBSDInit')
-PMGR_MOVE
+# socrates: relocate sheng_pmgr_run to just before IOKitBSDInit - pre-IOKit
+# the registry platform does not exist and panics cannot paint (first-boot
+# hardware evidence 2026-11-04). Symmetric with the restore above.
+python3 scripts/mgr-call-site.py move
 export XNU_AVAILABILITY_PL=$ROOT/.cache/fakeroot/usr/local/libexec/availability.pl
 python3 scripts/prepare-xnu-source.py
 # socrates: a Linux host builds with upstream clang and GNU tools (scripts/linux): rewrite the few
@@ -391,6 +367,18 @@ if [ "$SHENG_PMGR" = 1 ] && [ "${XNU_SOURCE_CORECRYPTO14:-0}" != 1 ]; then
   echo 'The sheng PMGR instrument requires the original-component kernel configuration' >&2
   exit 1
 fi
+# socrates two-pass bootstrap: archive-09 defers the bridge on a clean FIRST
+# pass (no reference candidate yet). This build must then compile WITHOUT the
+# call too - bsd_init.o references _sheng_pmgr_run when XNU_SHENG_PMGR=1 and
+# would fail to link against the missing archive - so downgrade BEFORE the
+# bsd_init compile flags below. The second kernel pass flips the stamp,
+# recompiles bsd_init with the call and links the bridge in.
+if [ "$SHENG_PMGR" = 1 ] && [ ! -f "$ROOT/build/sheng-platform-power/libShengPlatformPower.a" ]; then
+  echo 'build-xnu: PMGR bridge deferred (clean first pass, no reference candidate yet);' >&2
+  echo '            building WITHOUT the bridge - run the kernel step a SECOND time.' >&2
+  SHENG_PMGR=0
+fi
+
 SHENG_PMGR_STAMP=$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/.sheng-pmgr-mode
 if [ "$(cat "$SHENG_PMGR_STAMP" 2>/dev/null || echo 0)" != "$SHENG_PMGR" ]; then
   rm -f "$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/bsd_init.o"

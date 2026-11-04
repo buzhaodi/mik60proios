@@ -74,6 +74,12 @@ git clone https://github.com/buzhaodi/mik60proios.git
 #   mik60proios/firmware/uefi-socrates
 ```
 
+> **注意**：从本仓库复制出来的两个子目录**不带 .git**（历史在父仓对象库里），而 `unixnu` 驱动要求它们是 git 仓（要跑 submodule update）。复制后各执行一次：
+> ```bash
+> cd ~/unixnu-work/UniXNU-socrates && git init && git add -A && git commit -m snapshot
+> cd ~/unixnu-work/uefi-socrates   && git init && git add -A && git commit -m snapshot
+> ```
+
 > 工作区布局（与构建脚本里的路径一致）：
 > ```
 > ~/unixnu-work/
@@ -109,6 +115,10 @@ python3 unixnu fetch --uefi ~/unixnu-work/uefi-socrates -D ../UniXNU-socrates
 python3 unixnu tree --uefi ~/unixnu-work/uefi-socrates -D ../UniXNU-socrates
 
 # 3.4 内核（含 AMFI PMGR 桥；首次全量约 1-2 小时，之后增量很快）
+# 注意：桥的审计需要一个"已存在的 prelink 产物"做参照——干净首次构建要连跑两次：
+# 第一遍没有参照物，自动跳过桥（正常提示，不是错误）；第一遍的 prelink 产物会
+# 具现参照物，第二遍把桥编进去。
+python3 unixnu build kernel --uefi ~/unixnu-work/uefi-socrates -D ../UniXNU-socrates
 python3 unixnu build kernel --uefi ~/unixnu-work/uefi-socrates -D ../UniXNU-socrates
 
 # 3.5 固件（首次 openssl 全量编约 1 小时，edk2 的 -n32 只按模块并行、模块内串行）

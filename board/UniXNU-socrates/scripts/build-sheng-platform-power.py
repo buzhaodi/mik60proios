@@ -42,6 +42,18 @@ if not _firmware.is_file():
         _firmware.unlink(missing_ok=True)
         os.symlink(str(_source.resolve()), _firmware)
 
+# Clean first build: the audit needs a PREVIOUS prelink output as its reference
+# candidate (a raw kernelcache is not enough - the audit pins per-module hashes
+# against the emit_prelink plan json). With nothing materialized yet, defer
+# gracefully: this kernel pass links without the bridge, and the pass's own
+# prelink output feeds the NEXT kernel pass (the two-pass flow is normal: the
+# bridge's audit validates against a prelinked candidate by design).
+if not any((ROOT / 'build/xnu-prelink').glob('native-owner-ufs-*-candidate.macho')):
+    print('PMGR bridge deferred: no reference candidate yet (clean build).')
+    print('This kernel pass links without the bridge; run the kernel step a')
+    print('SECOND time - the first prelink materializes the candidate it needs.')
+    sys.exit(0)
+
 
 def run(command, **kwargs):
     return subprocess.check_output([str(v) for v in command], timeout=90, **kwargs)
