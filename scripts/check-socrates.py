@@ -61,10 +61,18 @@ if __name__ == '__main__':
     if not rows or len(rows) > 128:
         errors.append('Empty map or descriptor capacity exceeded')
     for name, base, size in reservations:
-        # A descriptor may be page-rounded past the DT extent (dump_display_region is 0x800), so
-        # containment counts as covered; the covering descriptor must still be a reservation.
-        if not any(a <= base and base + size <= a + s and re.search(r'\bReserv\b', attrs)
-                   for _, a, s, attrs in rows):
+        # Union coverage: the generator names a segment by the covering stock cfg label, and one
+        # DT reservation can meet two stock regions (adspslpi crosses "PIL Reserved" into
+        # "Display Demura"), so the reservation legitimately partitions into several Reserved
+        # descriptors. What must hold is that every page of it is inside Reserved descriptors
+        # (a descriptor may also be page-rounded past the DT extent: dump_display_region is 0x800).
+        cursor = base
+        for a, e in sorted((a, a + s) for _, a, s, attrs in rows if re.search(r'\bReserv\b', attrs)):
+            if a <= cursor < e:
+                cursor = e
+                if cursor >= base + size:
+                    break
+        if cursor < base + size:
             errors.append(f'Missing reservation: {name}')
     for index, (name, base, size, _) in enumerate(rows):
         if base % 4096 or size % 4096 or not size:

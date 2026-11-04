@@ -2,6 +2,7 @@
 """Build the opt-in, guarded sheng original-PMGR integration instrument."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import struct
 import subprocess
@@ -12,6 +13,34 @@ OUT = ROOT / 'build/sheng-platform-power'
 OUT.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(ROOT / 'kits/NativePrelink'))
 from native_prelink import macho, backed_offset, exports
+
+# A clean checkout has no native-owner-ufs candidate: this tree's own built
+# prelinked kernel IS one - emit_prelink built it from the same pinned original
+# kernelcache with the same slide, and it carries the same original ApplePMGR /
+# AppleMobileFileIntegrity kexts (kernel.json holds the plan the audit pins
+# against). Materialize the candidate layout the audit and the builder expect,
+# plus the original-kernelcache copy the audit's target-provider section reads.
+# Symlink targets are ABSOLUTE: the tree .cache is itself a symlink into the
+# board repository, so a relative target written there resolves against the
+# board checkout, not the tree, and ends up broken.
+_kernel = ROOT / '../kernel/kernel.macho'
+if _kernel.is_file():
+    _prelink = ROOT / 'build/xnu-prelink'
+    _prelink.mkdir(parents=True, exist_ok=True)
+    for _name, _src in (('native-owner-ufs-cpu-desktop-0-candidate.macho', _kernel),
+                        ('native-owner-ufs-cpu-desktop-0-candidate.json', ROOT / '../kernel/kernel.json')):
+        _dst = _prelink / _name
+        if not _dst.is_file():
+            _dst.unlink(missing_ok=True)
+            os.symlink(str(_src.resolve()), _dst)
+_firmware = ROOT / '.cache/firmware/kernelcache.macho/kernelcache.release.ipad7.decompressed'
+if not _firmware.is_file():
+    _source = ROOT / '../../ipsw/21H461/kernelcache.decompressed'
+    if _source.is_file() and hashlib.sha256(_source.read_bytes()).hexdigest() == \
+            'f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7':
+        _firmware.parent.mkdir(parents=True, exist_ok=True)
+        _firmware.unlink(missing_ok=True)
+        os.symlink(str(_source.resolve()), _firmware)
 
 
 def run(command, **kwargs):
@@ -88,12 +117,12 @@ for segment in info['segments']:
                     relocations[section['va'] + offset] = symbols[bits & 0xffffff][0]
 entries = [relocations.get(vtable + 16 + i * 8) for i in range(340)]
 require(all(entries) and vtable + 16 + 340 * 8 not in relocations, 'Exact 340-entry provider table')
-reference = ROOT / 'build/native-prelink/native-owner-ufs-rootauth3-candidate.macho'
+reference = ROOT / 'build/xnu-prelink/native-owner-ufs-rootauth3-candidate.macho'
 if not reference.exists():
     # Build products are pruned: a later candidate built from the same original kernelcache has the identical original
     # ApplePMGR class and inherited native IOPMGR slots; every slot/pointer check below still runs against it.
-    later = sorted((ROOT / 'build/native-prelink').glob('native-owner-ufs-cpu-desktop-*-candidate.macho'), key=lambda f: f.stat().st_mtime)
-    require(later, 'No reference candidate available')
+    later = sorted((ROOT / 'build/xnu-prelink').glob('native-owner-ufs-cpu-desktop-*-candidate.macho'), key=lambda f: f.stat().st_mtime)
+    require(later, 'No reference candidate available (run the kernel step once first)')
     reference = later[-1]
 candidate = reference.read_bytes()
 meta = macho(candidate)
@@ -126,8 +155,19 @@ asm.write_text(''.join(f'.globl {name}\n.set {name}, {va:#x}\n' for name, va in 
 sdk = run(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
 run(['xcrun', 'clang', '-target', 'arm64-apple-ios17.0', '-isysroot', sdk, '-c', asm, '-o', OUT / 'original-bindings.o'])
 late = OUT / 'ShengPlatformPower.late.o'
-run(['llvm-objcopy', '--remove-section=__DATA,__mod_init_func',
-     '--globalize-symbol=__GLOBAL__sub_I_ShengPlatformPower.cpp', obj, late])
+# llvm-objcopy cannot edit Mach-O; make the two edits directly, without touching
+# any instruction: empty __DATA,__mod_init_func (the publication runs from the
+# sheng_pmgr_run hook in bsd_init, not from a C++ static initializer) and
+# globalize the initializer symbol. section_64 layout: addr +32, size +40,
+# reloff +56, nreloc +60; nlist_64 n_type is +4 into each 16-byte entry.
+blob = bytearray(raw)
+mod_init = next(s for seg in info['segments'] for s in seg['sections'] if s['name'] == '__mod_init_func')
+struct.pack_into('<Q', blob, mod_init['command_offset'] + 40, 0)   # size
+struct.pack_into('<II', blob, mod_init['command_offset'] + 56, 0, 0)  # reloff, nreloc
+entry = next(i for i, (n, _, _) in enumerate(symbols)
+             if n == '__GLOBAL__sub_I_ShengPlatformPower.cpp')
+blob[at + entry * 16 + 4] |= 0x01  # N_EXT
+late.write_bytes(bytes(blob))
 
 
 def text_section(blob):

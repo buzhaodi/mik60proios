@@ -72,8 +72,13 @@ extern "C" void sheng_pmgr_run(void)
   sheng_pmgr_observation[1] = static_cast<uint32_t>(kIOReturnError);
   if (mode > 3 || sheng_pmgr_observation[0]) { sheng_pmgr_checkpoint(); return; }
   sheng_pmgr_observation[0] = 1;
-  kern_return_t result = OSKextLoadKextWithIdentifier("com.apple.driver.ApplePMGR");
-  if (result) { sheng_pmgr_observation[1] = static_cast<uint32_t>(result); sheng_pmgr_checkpoint(); return; }
+  // BRING-UP FIX (2026-11-04): com.apple.driver.ApplePMGR is in this board's
+  // prelink roots, so its metaclass is registered during kernel startup and
+  // OSKextLoadKextWithIdentifier is redundant here - on the device the call
+  // hard-crashed before any panic could paint (bisect 1: the panic placed
+  // behind it never appeared; sheng keeps the load only because its tree does
+  // not carry the kext in the roots). The metaclass lookups below already
+  // prove the registration; construct straight from them, as sirius does.
   const OSMetaClass *parent = lookup("ApplePMGR"), *nubMeta = lookup("ApplePMGRNub");
   if (!parent || parent != &ApplePMGR::gMetaClass || parent->getClassSize() != 0x4b8a8 ||
       !nubMeta || nubMeta->getClassSize() != 0x740) { sheng_pmgr_checkpoint(); return; }
@@ -81,7 +86,7 @@ extern "C" void sheng_pmgr_run(void)
   void *handle = OSMetaClass::preModLoad(g_kernel_kmod_info.name);
   if (!handle) { sheng_pmgr_checkpoint(); return; }
   sheng_pmgr_static_init();
-  result = OSMetaClass::postModLoad(handle);
+  kern_return_t result = OSMetaClass::postModLoad(handle);
   if (result) { sheng_pmgr_observation[1] = static_cast<uint32_t>(result); sheng_pmgr_checkpoint(); return; }
   sheng_pmgr_observation[9] = ShengPlatformPower::gMetaClass.getInstanceCount();
   sheng_pmgr_observation[11] = nubMeta->getInstanceCount();
@@ -155,5 +160,14 @@ extern "C" void sheng_pmgr_run(void)
   if (sheng_pmgr_observation[9] != sheng_pmgr_observation[10] ||
       sheng_pmgr_observation[11] != sheng_pmgr_observation[12]) sheng_pmgr_observation[1] = static_cast<uint32_t>(kIOReturnError);
   sheng_pmgr_observation[0] = 4;
+  // BRING-UP INSTRUMENT (2026-11-04): the mode-2 path reset the device without
+  // any panic screen; surface the failure stage and every observation on the
+  // panic screen instead of returning silently. Remove when the bridge runs.
+  panic("PMGRDBG mode=%u obs0=%llu obs1=%llu obs2=%llu obs3=%llu obs4=%llx obs5=%llx obs6=%llx obs7=%llx obs8=%llx obs9=%llu obs10=%llu obs11=%llu obs13=%llu obs14=%llu",
+        mode, sheng_pmgr_observation[0], sheng_pmgr_observation[1], sheng_pmgr_observation[2],
+        sheng_pmgr_observation[3], sheng_pmgr_observation[4], sheng_pmgr_observation[5],
+        sheng_pmgr_observation[6], sheng_pmgr_observation[7], sheng_pmgr_observation[8],
+        sheng_pmgr_observation[9], sheng_pmgr_observation[10], sheng_pmgr_observation[11],
+        sheng_pmgr_observation[13], sheng_pmgr_observation[14]);
   sheng_pmgr_checkpoint();
 }

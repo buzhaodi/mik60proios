@@ -60,10 +60,20 @@ archives = [
   "build-software-aes-bindings.py",
   "build-mockfs-fixture.py",
   "build-libpthread-kernel.py",
+  # The original-PMGR bridge: publishes a provider-less ApplePMGRNub from the
+  # sheng_pmgr_run hook (CONFIG_XNU_SHENG_PMGR=y). First-boot hardware
+  # evidence (2026-11-04): without it the unchanged target AMFI panics
+  # "AMFI: No PMGR?" @ConfigurationSettings.cpp:235 on the RAM root as well,
+  # not only on the UFS root the older note claimed. The AMFI latch reads
+  # through the nub (provider at nub+0x88, readAon/writeAon slots, OR bit 2)
+  # and the nub helpers return 0 / no-op when the provider is NULL - the
+  # sirius-yooglery evidence - so the bridge needs no hardware power window.
+  # The vermeer builder runs unmodified on Linux (the scripts/linux xcrun
+  # shim); its native-owner-ufs candidate reference is replaced by the pinned
+  # original kernelcache, the ground truth every candidate was rebuilt from.
+  "build-sheng-platform-power.py",
 ]
 # Omitted on purpose, unlike sheng:
-#   build-sheng-platform-power.py   verify-proofs against a native-owner-ufs-*-candidate macho that only a
-#                                   live-device GDB session produces (CONFIG_XNU_SHENG_PMGR is off here).
 #   build-native-legacy-display.py  same dependency through audit-mobile-graphics-legacy.py
 #                                   (CONFIG_XNU_NATIVE_LEGACY_DISPLAY is off here).
 #   build-arm-driver.py NativeAdreno and the two Adreno kit builders
@@ -183,6 +193,10 @@ userland_args = [
   "serial=3",
   "debug=0x14e",
   "kt_fixed_zones=120",
+  # selects the CONFIG_XNU_SHENG_PMGR bridge: bsd_init publishes the
+  # provider-less ApplePMGRNub that satisfies AMFI's latch (first-boot
+  # evidence 2026-11-04: the RAM root hits "AMFI: No PMGR?" without it)
+  "sheng-pmgr=2",
 ]
 loader = "firmware"
 title = "socrates first boot: source 4K XNU to console"
@@ -193,6 +207,10 @@ trust_cache_sha256 = [
   "7416ca4f8377146626bb284e2133c76bee6cb4e3ee0af5d648b186235a7323a7",
   "8900d6a93d7a59ce1a872a5c081e559f4240a218f97e12d44d22dda46644d68f",
 ]
+# 2026-11-04: restored VERBATIM from the commit proven to reach the AMFI panic
+# on the byte-identical kernel (the trimmed lines all garbled and reset; the
+# touch probe panics within a second of bsd_init without sheng-touch=0 - fuxi
+# community evidence). Do not trim this line without a per-arg bisect.
 kernel_args = [
   "-v",
   "serial=3",
@@ -241,6 +259,10 @@ kernel_args = [
   "-no_slto_panic",
   "ml-timeout-lock-panic-scale=40",
   "sheng-touch-hid=1",
+  # 2026-11-04: mode 2 for the bridge ladder rung 2 - the provider-less ApplePMGRNub
+  # publication path runs: kext load, allocation, nub create, attach/start,
+  # registerService, waitForMatchingService.
+  "sheng-pmgr=2",
   # 1, not 2: 2 opens the Data store window for writes below the log reserve.
   # With CONFIG_XNU_NATIVE_UFS = n there is no store to write, and the bring-up
   # profile must stay physically unable to touch userdata - the only writer on
