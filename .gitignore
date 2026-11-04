@@ -1,0 +1,28 @@
+# ---- 不入库的构建产物 ----
+out/
+Build/
+*.log
+__pycache__/
+*.pyc
+
+# ---- 官方固件与提取物（约 8.4 GB，产权归小米，请自行下载）----
+firmware/
+vendor_boot.img
+boot.img.orig
+*.tgz
+
+# ---- 上游仓库克隆（各自的版权与许可）----
+UniXNU/
+UniXNU-sheng/
+UniXNU-vermeer/
+UniXNU-sm8550-common/
+uefi-vermeer/
+
+# WSL 镜像副本
+wsl-copy/
+
+# IDE / 系统杂项
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
