@@ -78,6 +78,7 @@ git clone https://github.com/buzhaodi/mik60proios.git
 > ```bash
 > cd ~/unixnu-work/UniXNU-socrates && git init && git add -A && git commit -m snapshot
 > cd ~/unixnu-work/uefi-socrates   && git init && git add -A && git commit -m snapshot
+> bash mik60proios/tools/restore-uefi-submodules.sh ~/unixnu-work/uefi-socrates
 > ```
 
 > 工作区布局（与构建脚本里的路径一致）：

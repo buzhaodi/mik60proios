@@ -19,6 +19,7 @@ for repo in UniXNU-socrates uefi-socrates; do
   git -C "$R/$repo" add -A
   git -C "$R/$repo" -c user.email=repro@test -c user.name=repro commit -qm "snapshot from mik60proios"
 done
+bash "$SRC/tools/restore-uefi-submodules.sh" "$R/uefi-socrates"
 echo "   board repo:  $(git -C "$R/UniXNU-socrates" log --oneline -1)"
 echo "   firmware:    $(git -C "$R/uefi-socrates" log --oneline -1)"
 
