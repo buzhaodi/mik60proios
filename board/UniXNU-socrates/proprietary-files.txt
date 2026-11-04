@@ -1,0 +1,12 @@
+# Proprietary files of the Redmi K60 Pro (socrates). They stay out of Git: scripts/extract-files.py copies them
+# into .cache/firmware/ (see "unixnu tree"), checks every file against its SHA-256 and refuses any other content.
+#
+# path|sha256       path relative to the source (a dump directory, a mounted partition, an ssh path or the fetch base)
+# -path|sha256      optional file: a missing one is reported, not an error
+# @fetch BASE       public mirror used when no source is given; BASE + path is the file URL
+#
+# TODO(socrates-firmware): empty on purpose. The touch controller of this board is not known
+# until the socrates dtbo is read; vermeer (Redmi K70) uses a Goodix GT9916S with no host
+# firmware file declared, and sheng's Novatek entry below is NOT this board's hardware.
+# Add this board's entries only after the controller and its firmware are identified in
+# the socrates device tree, with the SHA-256 of a file observed on this phone.
