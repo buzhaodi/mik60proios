@@ -32,14 +32,15 @@ mik60proios/
 ├── firmware/uefi-socrates/  # 固件仓（Mu-Silicium 检出 + socratesPkg，含全部修复）
 ├── tools/                    # 移植过程中自研的诊断 / 注入 / 验证脚本
 ├── docs/                     # ABL 源码级分析、社区先例研究
-└── prebuilt*/                # 上机记录 .json 清单（镜像二进制不入库，按 repro/ 脚本自建）
+└── prebuilt*/                # （已退役，不入库）上机镜像记录见 BRINGUP-LOG 文字
 ```
 
 两个子目录保留了**完整的 git 提交历史**——每条提交信息都写明了当时的真机证据（"first-boot hardware evidence"），是本移植的第一手记录。
 
 ## 快速开始
 
-> **镜像不入库**（仓库体积政策，2026-11-05 起）：`prebuilt*/` 里只有上机记录用的 `.json` 清单。
+> **镜像不入库**（仓库体积政策，2026-11-05 起）：`.gitignore` 已忽略 `*.img` 和整个 `prebuilt*/`，
+> 仓库里没有任何可下载的成品；上机记录（各段 sha）都在 BRINGUP-LOG 文字里。
 > 可刷写的 boot.img 请按 `repro/build-userland-boot.sh`（WSL 内端到端一条龙）或下方"完整复现"
 > §3.6b 自行构建。**每次 `fastboot boot` 前必须先完整开机进一次 Android**（见"测试协议"）。
 

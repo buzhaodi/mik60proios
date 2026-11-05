@@ -118,15 +118,14 @@ Failed to mount root device @IOKitBSDInit.cpp:984
 
 ## 6. 复现战果的镜像
 
-> **2026-11-05 起镜像二进制不再入库**（仓库体积政策，`.gitignore` 已加 `*.img`）：`prebuilt*/` 里只保留
-> `.json` 清单作为上机记录（内核/ramdisk/FD/DTB 各段 sha、大小、`hardware_tested` 标志）。要拿可刷写的
-> 镜像请按 `README` §完整复现 或 `repro/build-userland-boot.sh` 自行构建。git 历史里的旧 img 不追删；
-> 如需彻底瘦身历史（filter-repo 重写）属于破坏性操作，由仓库所有者自行决定。
+> **2026-11-05 起 `prebuilt*/` 整体退役**（仓库体积政策，`.gitignore` 忽略 `*.img` 与整个
+> `prebuilt*/`）：镜像二进制、`.json` 清单均不入库，上机记录（各段 sha）就写在本文件文字里。
+> 要拿可刷写的镜像请按 `README` §完整复现 或 `repro/build-userland-boot.sh` 自行构建。git 历史里
+> 的旧 img/清单不追删；如需彻底瘦身历史（filter-repo 重写）属于破坏性操作，由仓库所有者自行决定。
 
-`boot-pmgrlate-boot.json`（上机验证到 `Failed to mount root device` 的那一版）：FD `a3741876...`、
-DTB `5c731bfe...`、boot 镜像内核段 `e5909857...`。
-
-`boot-userland-boot.json`（首个 EL0 里程碑初版，见 §8 的失败与修复记录）。
+历史记录（json 清单已删，关键 sha 存档于此）：上机验证到 `Failed to mount root device` 的那一版
+（proven 基线）= FD `a3741876...`、DTB `5c731bfe...`、boot 镜像内核段 `e5909857...`；首个 EL0 里程碑
+初版 cdhash `d9ea65f7...`（LC_MAIN 版，已被 §8.3 的 `d80d909c...` 取代）。
 
 ---
 
@@ -204,7 +203,8 @@ SpringBoard 真桌面本阶段不可行（APFS 块设备/Apple 签名链/SEP key
 
 ## 8. 首个 EL0 攻坚战（2026-11-05，7 轮真机判别）——交接记录
 
-> 本节是完整战况记录与交接文档。所有判别镜像的 .img 已按仓库政策删除，`.json` 清单留在 `prebuilt-test/`。
+> 本节是完整战况记录与交接文档。判别镜像的 .img 与 .json 清单均已按仓库政策删除（`prebuilt*/` 退役），
+> 关键 sha 已写入本节与 §6 文字，镜像一律按 `repro/build-userland-boot.sh` 重建。
 
 ### 8.1 七轮判别地图
 

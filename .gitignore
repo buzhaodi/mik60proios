@@ -7,6 +7,9 @@ __pycache__/
 
 # ---- 引导镜像（成品 .img 不再入库：仓库体积政策，请按 repro/ 脚本自行构建）----
 *.img
+# 构建产物的清单/整个 prebuilt 目录也不入库（boot.json 随 repro 脚本在 out/ 生成）
+prebuilt/
+prebuilt-test/
 
 # ---- 官方固件与提取物（约 8.4 GB，产权归小米，请自行下载）----
 firmware/*.tgz
