@@ -40,6 +40,21 @@ struct ctx {
 #endif
 #define PANIC_TEXT_BYTES 256
 
+/* The socrates exec breadcrumb array, recorded by the kernel source patch
+ * patches/xnu-exec-trace.patch (mach_loader.c/kern_exec.c: the load-chain
+ * stage stamp and the three return codes). 0 when the kernel does not define
+ * the symbol, and then no trace lines are drawn. */
+#ifndef EXEC_TRACE
+#define EXEC_TRACE 0UL
+#endif
+
+/* The socrates user-mode abort context (same kernel patch, osfmk/arm64/sleh.c):
+ * the faulting pc, address, ESR and stack pointer, stamped where the fault is
+ * about to be triaged. 0 when the kernel does not define the symbol. */
+#ifndef EXEC_FAULT
+#define EXEC_FAULT 0UL
+#endif
+
 __attribute__((noreturn)) static void park (void)
 {
   for (;;) {
@@ -268,6 +283,33 @@ __attribute__((noreturn, used, section(".text.b_main"))) void panic_screen_main 
   (void)MAX_MEM;
   hex (&g, "\npages=", *(volatile const u32 *)PAGE_TOTAL);
   hex (&g, "\nfree=", *(volatile const u32 *)PAGE_FREE);
+  /* Exec breadcrumb word (patches/xnu-exec-trace.patch), packed as
+   * STAGE-bitmask | CS_ERR<<8 | MACH_ERR<<16 | LOAD_ERR<<24 | SITE<<32,
+   * with a fixed 0xE7 canary in the top byte. The kernel patch documents the
+   * stage bits (bit n-1 = stage n ran: 1 load_machfile entered, 2 parse
+   * entered, 3 signature load reached, 4 signature load failed - CS_ERR is
+   * the very number the "load code signature error" printf never gets to
+   * show here, 5 signature loaded, 6 parse returned, 7 load_machfile
+   * returned to exec) and the reject-site codes in the SITE byte. */
+  if (EXEC_TRACE) {
+    hex (&g, "\nEXEC=", *(volatile const u64 *)EXEC_TRACE);
+  }
+  /* The user-mode fault that killed PID 1 (SIGBUS, 2026-11-05): the faulting
+   * pc names the instruction, the address what it touched, the ESR the abort
+   * class, and the stack pointer rules the stack-placement paths in or out. */
+  if (EXEC_FAULT) {
+    hex (&g, "\nFAULT_PC=", *(volatile const u64 *)(EXEC_FAULT + 8));
+    hex (&g, "\nFAULT_AT=", *(volatile const u64 *)(EXEC_FAULT + 16));
+    hex (&g, "\nFAULT_ESR=", *(volatile const u64 *)(EXEC_FAULT + 24));
+    hex (&g, "\nFAULT_SP=", *(volatile const u64 *)(EXEC_FAULT + 32));
+    /* Slot 0: kind bits (1 EL0 abort triaged, 2 signal funnel) in the low
+     * byte, the 0xE7 canary above. Slots 5-7: the exception-to-signal funnel
+     * (code, subcode=the faulting address, exception<<32|delivered signal). */
+    hex (&g, "\nFAULT_K=", *(volatile const u64 *)(EXEC_FAULT + 0));
+    hex (&g, "\nSIG_CODE=", *(volatile const u64 *)(EXEC_FAULT + 40));
+    hex (&g, "\nSIG_AT=", *(volatile const u64 *)(EXEC_FAULT + 48));
+    hex (&g, "\nSIG_INFO=", *(volatile const u64 *)(EXEC_FAULT + 56));
+  }
   /* The raw argument slots are not dumped: the formatted message above already carries them (room for the PANIC_TEXT copy). */
   mark[0] = 0xC0FFEE11u;
   mark[1] = 0x5CEEDA7Au;

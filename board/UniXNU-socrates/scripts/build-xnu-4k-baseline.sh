@@ -44,7 +44,11 @@ export LC_ALL=C
 # socrates PMGR: restore the sheng_pmgr_run block to its patched position
 # before the series re-applies (see scripts/mgr-call-site.py).
 python3 scripts/mgr-call-site.py restore
-for LATE_PATCH in "$ROOT/patches/xnu/zzz-boot-progress.patch" "$ROOT/patches/xnu/zzyc-owner-skip-launch-constraints.patch" \
+# The exec trace patch is written against the post-zzz state (its kern_exec.c
+# hunk sits between zzz's "load_machfile returned" stamp and the lret check),
+# so it is the newest layer and reverses FIRST: with it still applied,
+# zzz-boot-progress cannot reverse and the whole series loses idempotence.
+for LATE_PATCH in "$ROOT/kits/socrates/patches/xnu-exec-trace.patch" "$ROOT/patches/xnu/zzz-boot-progress.patch" "$ROOT/patches/xnu/zzyc-owner-skip-launch-constraints.patch" \
     "$ROOT/patches/xnu/zzyb-native-cryptex-os-view.patch" "$ROOT/patches/xnu/zzy-staged-system-apps.patch" \
     "$ROOT/patches/xnu/zzy-native-gpu-addon-mount.patch"; do
   if git -C .cache/xnu-work apply --reverse --check "$LATE_PATCH" >/dev/null 2>&1; then
@@ -52,6 +56,17 @@ for LATE_PATCH in "$ROOT/patches/xnu/zzz-boot-progress.patch" "$ROOT/patches/xnu
   fi
 done
 for PATCH in "$ROOT"/patches/xnu/*.patch "$ROOT"/kits/NativePrelink/patches/*.patch; do
+  if ! git -C .cache/xnu-work apply --reverse --check "$PATCH" >/dev/null 2>&1; then
+    git -C .cache/xnu-work apply --check "$PATCH"
+    git -C .cache/xnu-work apply "$PATCH"
+  fi
+done
+# socrates exec trace (the board kit's own patch, package/patches/): applied last,
+# written against the post-series state (its header says which patches it follows);
+# idempotent through the same reverse --check. It records the load_machfile/
+# parse_machfile failure funnel into g_exec_trace so the panic screen can print
+# the exec error codes this board has no serial console for.
+for PATCH in "$ROOT"/kits/socrates/patches/*.patch; do
   if ! git -C .cache/xnu-work apply --reverse --check "$PATCH" >/dev/null 2>&1; then
     git -C .cache/xnu-work apply --check "$PATCH"
     git -C .cache/xnu-work apply "$PATCH"

@@ -1,0 +1,286 @@
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index 3578bcd..0647173 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -1347,6 +1347,16 @@ grade:
+ 	boot_progress_process_stage(proc_getpid(p),p->p_name,"exec load_machfile enter");
+ 	lret = load_machfile(imgp, mach_header, thread, &map, &load_result);
+ 	boot_progress_process_stage(proc_getpid(p),p->p_name,"exec load_machfile returned");
++	{
++		/* EXEC TRACE (socrates): see bsd/kern/mach_loader.c. The panic
++		 * renderer prints this word after the panic message - the load
++		 * return code is otherwise only ever printed on a serial
++		 * console this board lacks.
++		 */
++		extern volatile unsigned long g_exec_trace;
++		/* stage 7 + load_machfile's load_return_t (earlier evidence bytes stay) */
++		g_exec_trace = (g_exec_trace & ~0xFF000000ULL) | 64 | ((unsigned long)lret << 24);
++	}
+ 	if (lret != LOAD_SUCCESS) {
+ 		error = load_return_to_errno(lret);
+ 
+diff --git a/bsd/kern/mach_loader.c b/bsd/kern/mach_loader.c
+index 665536f..ecbb64a 100644
+--- a/bsd/kern/mach_loader.c
++++ b/bsd/kern/mach_loader.c
+@@ -102,6 +102,57 @@ extern kern_return_t    memory_object_signed(memory_object_control_t control,
+     boolean_t is_signed);
+ 
+ 
++/*
++ * EXEC TRACE (socrates bring-up): this board has no working kernel-side
++ * serial console and the panic renderer clears the frame buffer, so the
++ * exec -v scroll - including the "load code signature error" printf below -
++ * is unreadable on the device. The panic screen prints this one word after
++ * the panic message:
++ *   byte 0 STAGE bitmask, bit n-1 set when stage n ran:
++ *                 1 load_machfile entered, 2 parse_machfile entered,
++ *                 3 LC_CODE_SIGNATURE dispatch reached,
++ *                 4 load_code_signature failed (byte 1 = its return code),
++ *                 5 code signature loaded, 6 parse_machfile returned
++ *                 (byte 2 = its load_return_t), 7 load_machfile returned to
++ *                 exec (byte 3 = its load_return_t);
++ *   byte 4 REJECT SITE, 0 = none stamped:
++ *                 1 header+sizeofcmds sanity check (parse entry),
++ *                 2 short read of the command area (resid != 0),
++ *                 3 no room for a minimal load command,
++ *                 4 load-command prevalidation (cmdsize overflow/straddle),
++ *                 5 load_segment returned an error (pass 2),
++ *                 6 header-segment rule after a successful load_segment,
++ *                 7 pass 3 found no segment mapping the header,
++ *                 8 segment cmdsize smaller than its struct,
++ *                 9 LC_SEGMENT(_64) for the wrong ABI;
++ *   byte 7 0xE7 canary, proving on the panic screen that the read worked and
++ *                 keeping the variable in the file-backed __DATA segment the
++ *                 renderer's symbol validation requires.
++ * The exec path of a boot is single-threaded (init), so the stamps race with
++ * nothing. The bitmask keeps the whole history: e.g. 0x63 says parse entered
++ * and returned without ever reaching the signature load.
++ */
++volatile unsigned long g_exec_trace = 0xE700000000000000ULL;
++#define G_EXEC_TRACE_SITE(n) g_exec_trace = (g_exec_trace & ~0xFF00000000ULL) | ((unsigned long)(n) << 32)
++
++/*
++ * The user-mode fault context (socrates, 2026-11-05). The PID 1 SIGBUS death
++ * had NO EL0 abort in the hardware path, so the record has two layers:
++ *   slot 0 kind bitmask + canary top byte: bit 0 set by osfmk/arm64/sleh.c
++ *                 (handle_user_abort: a genuine EL0 abort reached triage),
++ *                 bit 1 set by bsd/uxkern/ux_exception.c (handle_ux_exception:
++ *                 the Mach-exception-to-signal funnel ran - this fires even
++ *                 when the hardware abort was never an EL0 one);
++ *   slots 1-4 the EL0 abort: faulting pc, address, ESR, stack pointer;
++ *   slots 5-7 the signal funnel: code (kern_return), subcode (the faulting
++ *                 address for EXC_BAD_ACCESS), exception<<32 | delivered
++ *                 signal number.
++ * The panic renderer prints all of it after the panic message; the cleared
++ * frame buffer leaves no other trace of what killed init. Top-byte canary
++ * and file-backed __DATA placement, same reasoning as g_exec_trace.
++ */
++volatile unsigned long g_exec_fault[8] = {0xE700000000000000ULL, 0, 0, 0, 0, 0, 0, 0};
++
+ /* An empty load_result_t */
+ static const load_result_t load_result_null = {
+ 	.mach_header = MACH_VM_MIN_ADDRESS,
+@@ -468,6 +519,7 @@ load_machfile(
+ 	kern_return_t           kret;
+ 	unsigned int            pmap_flags = 0;
+ 
++	g_exec_trace |= 1;    /* EXEC TRACE: stage 1, load_machfile entered */
+ 	if (os_add_overflow(file_offset, macho_size, &total_size) ||
+ 	    total_size > file_size) {
+ 		return LOAD_BADMACHO;
+@@ -585,6 +637,9 @@ load_machfile(
+ 	    0, aslr_page_offset, dyld_aslr_page_offset, result,
+ 	    NULL, imgp);
+ 
++	/* EXEC TRACE: stage 6 + parse_machfile's load_return_t */
++	g_exec_trace = (g_exec_trace & ~0xFF0000ULL) | 32 | ((unsigned long)lret << 16);
++
+ 	if (lret != LOAD_SUCCESS) {
+ 		vm_map_deallocate(map); /* will lose pmap reference too */
+ 		return lret;
+@@ -822,6 +877,8 @@ parse_machfile(
+ 	effective_page_size = vm_map_page_size(map);
+ #endif /* __arm64__ */
+ 
++	g_exec_trace |= 2;    /* EXEC TRACE: stage 2, parse_machfile entered */
++
+ 	if (header->magic == MH_MAGIC_64 ||
+ 	    header->magic == MH_CIGAM_64) {
+ 		mach_header_sz = sizeof(struct mach_header_64);
+@@ -912,6 +969,7 @@ parse_machfile(
+ 	    (off_t)cmds_size > macho_size ||
+ 	    round_page_overflow(cmds_size, &alloc_size) ||
+ 	    alloc_size > INT_MAX) {
++		G_EXEC_TRACE_SITE(1);    /* EXEC TRACE site 1: header+sizeofcmds sanity */
+ 		return LOAD_BADMACHO;
+ 	}
+ 
+@@ -933,6 +991,7 @@ parse_machfile(
+ 	if (resid) {
+ 		{
+ 			/* We must be able to read in as much as the mach_header indicated */
++			G_EXEC_TRACE_SITE(2);    /* EXEC TRACE site 2: short read of the command area */
+ 			kfree_data(addr, alloc_size);
+ 			return LOAD_BADMACHO;
+ 		}
+@@ -1048,6 +1107,7 @@ parse_machfile(
+ 		 * needed by the dynamic loader to read the mach headers, etc.
+ 		 */
+ 		if ((pass == 3) && (found_header_segment == FALSE)) {
++			G_EXEC_TRACE_SITE(7);    /* EXEC TRACE site 7: pass 3 found no header segment */
+ 			ret = LOAD_BADMACHO;
+ 			break;
+ 		}
+@@ -1064,6 +1124,7 @@ parse_machfile(
+ 		while (ncmds--) {
+ 			/* ensure enough space for a minimal load command */
+ 			if (offset + sizeof(struct load_command) > cmds_size) {
++				G_EXEC_TRACE_SITE(3);    /* EXEC TRACE site 3: no room for a minimal load command */
+ 				ret = LOAD_BADMACHO;
+ 				break;
+ 			}
+@@ -1085,6 +1146,7 @@ parse_machfile(
+ 			if (os_add_overflow(offset, lcp->cmdsize, &offset) ||
+ 			    lcp->cmdsize < sizeof(struct load_command) ||
+ 			    offset > cmds_size) {
++				G_EXEC_TRACE_SITE(4);    /* EXEC TRACE site 4: load-command prevalidation */
+ 				ret = LOAD_BADMACHO;
+ 				break;
+ 			}
+@@ -1100,6 +1162,7 @@ parse_machfile(
+ 			case LC_SEGMENT: {
+ 				struct segment_command *scp = (struct segment_command *) lcp;
+ 				if (scp->cmdsize < sizeof(*scp)) {
++					G_EXEC_TRACE_SITE(8);    /* EXEC TRACE site 8: 32-bit segment cmdsize */
+ 					ret = LOAD_BADMACHO;
+ 					break;
+ 				}
+@@ -1153,6 +1216,7 @@ parse_machfile(
+ 					 * Having an LC_SEGMENT command for the
+ 					 * wrong ABI is invalid <rdar://problem/11021230>
+ 					 */
++					G_EXEC_TRACE_SITE(9);    /* EXEC TRACE site 9: wrong-ABI segment command */
+ 					ret = LOAD_BADMACHO;
+ 					break;
+ 				}
+@@ -1167,11 +1231,15 @@ parse_machfile(
+ 				    slide,
+ 				    result,
+ 				    imgp);
++				if (ret != LOAD_SUCCESS) {
++					G_EXEC_TRACE_SITE(5);    /* EXEC TRACE site 5: load_segment error (32-bit) */
++				}
+ 				if (ret == LOAD_SUCCESS && scp->fileoff == 0 && scp->filesize > 0) {
+ 					/* Enforce a single segment mapping offset zero, with R+X
+ 					 * protection. */
+ 					if (found_header_segment ||
+ 					    ((scp->initprot & (VM_PROT_READ | VM_PROT_EXECUTE)) != (VM_PROT_READ | VM_PROT_EXECUTE))) {
++						G_EXEC_TRACE_SITE(6);    /* EXEC TRACE site 6: header-segment rule (32-bit) */
+ 						ret = LOAD_BADMACHO;
+ 						break;
+ 					}
+@@ -1183,6 +1251,7 @@ parse_machfile(
+ 			case LC_SEGMENT_64: {
+ 				struct segment_command_64 *scp64 = (struct segment_command_64 *) lcp;
+ 				if (scp64->cmdsize < sizeof(*scp64)) {
++					G_EXEC_TRACE_SITE(8);    /* EXEC TRACE site 8: 64-bit segment cmdsize */
+ 					ret = LOAD_BADMACHO;
+ 					break;
+ 				}
+@@ -1207,6 +1276,7 @@ parse_machfile(
+ 					 * Having an LC_SEGMENT_64 command for the
+ 					 * wrong ABI is invalid <rdar://problem/11021230>
+ 					 */
++					G_EXEC_TRACE_SITE(9);    /* EXEC TRACE site 9: wrong-ABI segment command */
+ 					ret = LOAD_BADMACHO;
+ 					break;
+ 				}
+@@ -1222,11 +1292,15 @@ parse_machfile(
+ 				    result,
+ 				    imgp);
+ 
++				if (ret != LOAD_SUCCESS) {
++					G_EXEC_TRACE_SITE(5);    /* EXEC TRACE site 5: load_segment error (64-bit) */
++				}
+ 				if (ret == LOAD_SUCCESS && scp64->fileoff == 0 && scp64->filesize > 0) {
+ 					/* Enforce a single segment mapping offset zero, with R+X
+ 					 * protection. */
+ 					if (found_header_segment ||
+ 					    ((scp64->initprot & (VM_PROT_READ | VM_PROT_EXECUTE)) != (VM_PROT_READ | VM_PROT_EXECUTE))) {
++						G_EXEC_TRACE_SITE(6);    /* EXEC TRACE site 6: header-segment rule (64-bit) */
+ 						ret = LOAD_BADMACHO;
+ 						break;
+ 					}
+@@ -1291,6 +1365,7 @@ parse_machfile(
+ 				if (pass != 1) {
+ 					break;
+ 				}
++				g_exec_trace |= 4;          /* EXEC TRACE: stage 3, signature load reached */
+ 
+ 				/* pager -> uip ->
+ 				 *  load signatures & store in uip
+@@ -1306,6 +1381,8 @@ parse_machfile(
+ 					result,
+ 					imgp);
+ 				if (ret != LOAD_SUCCESS) {
++					/* EXEC TRACE: stage 4 + the very code the printf below would have shown */
++					g_exec_trace = (g_exec_trace & ~0xFF00ULL) | 8 | ((unsigned long)ret << 8);
+ 					printf("proc %d: load code signature error %d "
+ 					    "for file \"%s\"\n",
+ 					    proc_getpid(p), ret, vp->v_name);
+@@ -1317,6 +1394,7 @@ parse_machfile(
+ 					}
+ 				} else {
+ 					got_code_signatures = TRUE;
++					g_exec_trace |= 16;         /* EXEC TRACE: stage 5, code signature loaded */
+ 				}
+ 
+ 				if (got_code_signatures) {
+diff --git a/bsd/uxkern/ux_exception.c b/bsd/uxkern/ux_exception.c
+index 1780c2a..0562d53 100644
+--- a/bsd/uxkern/ux_exception.c
++++ b/bsd/uxkern/ux_exception.c
+@@ -174,6 +174,18 @@ handle_ux_exception(thread_t                    thread,
+ 
+ 	/* Send signal to thread */
+ 	if (ux_signal != 0) {
++		{
++			/* EXEC TRACE (socrates): see bsd/kern/mach_loader.c. The
++			 * exception-to-signal funnel - PID 1 died of SIGBUS with no
++			 * EL0 abort recorded (2026-11-05), so the (code, subcode)
++			 * the hardware paths never surfaced is captured here:
++			 * subcode is the faulting address for EXC_BAD_ACCESS. */
++			extern volatile unsigned long g_exec_fault[];
++			g_exec_fault[0] |= 2;
++			g_exec_fault[5] = (unsigned long)code;
++			g_exec_fault[6] = (unsigned long)subcode;
++			g_exec_fault[7] = ((unsigned long)exception << 32) | (unsigned long)ux_signal;
++		}
+ 		ut->uu_exception = exception;
+ 		//ut->uu_code = code; // filled in by threadsignal
+ 		ut->uu_subcode = subcode;
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+index ae94c7e..40fd7f6 100644
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -1675,6 +1675,19 @@ handle_user_abort(arm_saved_state_t *state, uint32_t esr, vm_offset_t fault_addr
+ #endif /* __has_feature(ptrauth_calls) */
+ 
+ 	boot_progress_user_abort(state, esr, fault_addr);
++	{
++		/* EXEC TRACE (socrates): see bsd/kern/mach_loader.c. The panic
++		 * renderer prints these after the panic message - this fault
++		 * killed PID 1 (SIGBUS, 2026-11-05) and the renderer's frame
++		 * buffer clear leaves no other trace of what it touched.
++		 */
++		extern volatile unsigned long g_exec_fault[];
++		g_exec_fault[0] |= 1;
++		g_exec_fault[1] = (unsigned long)get_saved_state_pc(state);
++		g_exec_fault[2] = (unsigned long)fault_addr;
++		g_exec_fault[3] = (unsigned long)esr;
++		g_exec_fault[4] = (unsigned long)get_saved_state_sp(state);
++	}
+ 	if (user_fault_in_self_restrict_mode(thread) &&
+ 	    task_is_jit_exception_fatal(get_threadtask(thread))) {
+ 		extern int exit_with_jit_exception(proc_t p);

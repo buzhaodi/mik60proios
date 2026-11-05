@@ -40,7 +40,7 @@ probe.load_segments(data)
 names = probe.rebase(candidate, data)
 code, load, entry = probe.assemble_c(ROOT / 'scripts/xnu-panic-screen.c',
                                    probe.CAVES[2] + probe.CAVE_SIZE, OUT, names)
-assert load + len(code) <= probe.PANIC_CAVE_END
+assert load + len(code) <= probe.CAVES[2] + probe.CAVE_SIZE + 0xB00  # the relocated budget (patcher panic_budget floor)
 
 
 def physical(va):
@@ -89,6 +89,23 @@ if args.exec_policy_format:
 (OUT / 'max-mem.bin').write_bytes(struct.pack('<Q', 0x40000000))
 (OUT / 'total.bin').write_bytes(struct.pack('<II', 0x12345, 0xdeadbeef))
 (OUT / 'free.bin').write_bytes(struct.pack('<II', 0xabcd, 0xdeadbeef))
+trace = None
+if '_g_exec_trace' in names:
+    # The short-read rejection story, packed the way the kernel patch packs
+    # it: stages 1, 2, 6 and 7 ran (parse entered and returned, the signature
+    # load never reached - bitmask 0x63), parse and load_machfile both
+    # returned LOAD_BADMACHO, reject site 2 (short read of the command area),
+    # and the 0xE7 canary in the top byte.
+    trace = 0xE702000002020063
+    (OUT / 'trace.bin').write_bytes(struct.pack('<Q', trace))
+fault = None
+if '_g_exec_fault' in names:
+    # The PID 1 SIGBUS story of 2026-11-05: NO EL0 abort reached the hardware
+    # handler (slots 1-4 zero, kind bit 0 unset); the exception-to-signal
+    # funnel caught EXC_BAD_ACCESS with KERN_PROTECTION_FAILURE at 0x16fe00050
+    # - just above the arm default stack top - and delivered SIGBUS (10).
+    fault = (2, 0, 0, 0, 0, 2, 0x16fe00050, 0x10000000a)
+    (OUT / 'fault.bin').write_bytes(struct.pack('<QQQQQQQQ', *fault))
 asm = f'''.text
 .global _start
 _start:
@@ -145,6 +162,10 @@ for file, address in (
     ('free.bin', physical(names['_vm_page_free_count'])),
 ):
     command += ['-device', f'loader,file={OUT / file},addr={address:#x},force-raw=on']
+if trace is not None:
+    command += ['-device', f'loader,file={OUT / "trace.bin"},addr={physical(names["_g_exec_trace"]):#x},force-raw=on']
+if fault is not None:
+    command += ['-device', f'loader,file={OUT / "fault.bin"},addr={physical(names["_g_exec_fault"]):#x},force-raw=on']
 sockpath = OUT / 'qmp.sock'
 sockpath.unlink(missing_ok=True)
 command += ['-qmp', f'unix:{sockpath},server=on,wait=off']
@@ -208,6 +229,13 @@ pixels = (OUT / 'framebuffer.bin').read_bytes()
 lines = message.split('\n') + [
          'TCR=0x00000022a51a251a', 'SCTLR=0x000000003454593d',
          'pages=0x0000000000012345', 'free=0x000000000000abcd']
+if trace is not None:
+    lines += [f'EXEC=0x{trace:016x}']
+if fault is not None:
+    lines += [f'FAULT_PC=0x{fault[1]:016x}', f'FAULT_AT=0x{fault[2]:016x}',
+              f'FAULT_ESR=0x{fault[3]:016x}', f'FAULT_SP=0x{fault[4]:016x}',
+              f'FAULT_K=0x{fault[0]:016x}', f'SIG_CODE=0x{fault[5]:016x}',
+              f'SIG_AT=0x{fault[6]:016x}', f'SIG_INFO=0x{fault[7]:016x}']
 for line, text in enumerate(lines):
     for column, char in enumerate(text):
         glyph = glyphs[ord(char) - 32]

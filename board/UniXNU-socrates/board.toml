@@ -47,6 +47,10 @@ windows = [
 
 [kernel]
 defconfig = "socrates_defconfig"
+# XNU source patches: schema v1 boards apply them from build-xnu-4k-baseline.sh -
+# the feed series (tree/patches/xnu, name order), then kits/NativePrelink, then the
+# board kit's own package/patches (the exec breadcrumb patch lives there).
+# scripts/unixnu/patches.py patch_series is the schema v2 hook and never runs here.
 # Archive builders of the kernel step, in order (SoC-level components, as sheng).
 # The VirtIO block/ram-block builders and their storage-binding post-processing are absent:
 # build-native-virtio-bindings.py reads build/storage-abi/interface-audit.json, which is

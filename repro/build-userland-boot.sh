@@ -16,6 +16,18 @@ UEFI=/home/yang/unixnu-work/uefi-socrates
 BOARD=/home/yang/unixnu-work/UniXNU-socrates
 MONO=/mnt/d/gittest/mik60proios
 
+# 0. CLI checkout: on a fresh machine ~/unixnu-work/UniXNU may not exist yet -
+#    the monorepo ships the build driver in-tree (vendor/UniXNU/, already carrying
+#    the --userland CLI patch), so bootstrap the work copy from there.
+U=/home/yang/unixnu-work/UniXNU
+if [ ! -d "$U" ]; then
+  mkdir -p /home/yang/unixnu-work
+  cp -R "$MONO/vendor/UniXNU" "$U"
+  find "$U" -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
+  git -C "$U" init -q && git -C "$U" add -A \
+    && git -C "$U" -c user.email=repro@test -c user.name=repro commit -qm "snapshot from mik60proios vendor/UniXNU"
+fi
+
 # 1. CLI: --userland is not in upstream main; apply the ported fork patch (idempotent).
 bash "$MONO/tools/apply-unixnu-userland-patch.sh" /home/yang/unixnu-work/UniXNU
 
@@ -23,10 +35,21 @@ bash "$MONO/tools/apply-unixnu-userland-patch.sh" /home/yang/unixnu-work/UniXNU
 #     both hardware-validated 2026-11-05 (idempotent).
 bash "$MONO/tools/apply-darwinboot-socrates-patch.sh" /home/yang/unixnu-work/UniXNU/drivers/DarwinBoot
 
-# 2. board: sync board.toml and the userland kit from the published monorepo copy.
+# 2. board: sync board.toml, the userland kit, and the exec-trace patch set
+#    (package/patches + the three scripts the kernel/payload steps run) from
+#    the published monorepo copy. Without the script sync a WSL board tree
+#    predating 2026-11-05 builds a kernel WITHOUT the g_exec_trace breadcrumb,
+#    and the payload step then fails to resolve _g_exec_trace for the panic
+#    screen (which is optional, but then the panic block answers nothing).
+#    NOTE: the kernel is NOT rebuilt by this script - run the unixnu kernel
+#    step (two passes) once before it so kernel.macho carries the trace.
 cp "$MONO/board/UniXNU-socrates/board.toml" "$BOARD/board.toml"
-mkdir -p "$BOARD/userland"
+mkdir -p "$BOARD/userland" "$BOARD/package/patches"
 cp "$MONO"/board/UniXNU-socrates/userland/* "$BOARD/userland/"
+cp "$MONO"/board/UniXNU-socrates/package/patches/*.patch "$BOARD/package/patches/"
+cp "$MONO"/board/UniXNU-socrates/scripts/build-xnu-4k-baseline.sh "$BOARD/scripts/"
+cp "$MONO"/board/UniXNU-socrates/scripts/patch-xnu-entry-probe.py "$BOARD/scripts/"
+cp "$MONO"/board/UniXNU-socrates/scripts/xnu-panic-screen.c "$BOARD/scripts/"
 
 # 3. userland: the signer self-test, the build, then the CI-mirror verification.
 cd "$BOARD"

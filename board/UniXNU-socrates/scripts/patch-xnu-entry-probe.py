@@ -198,6 +198,21 @@ def assemble_c(source, va, workdir, symbols):
         if not any(base <= text and text + 256 <= base + size for base, size, _, _ in SEGMENTS):
             raise SystemExit('Invalid _boot_progress_panic_text')
         definitions.append(f'-DPANIC_TEXT={text:#x}UL')
+    # Optional: the socrates exec breadcrumb word (kernel source patch
+    # patches/xnu-exec-trace.patch); kernels without it get 0 (no trace lines).
+    trace = symbols.get('_g_exec_trace')
+    if trace is not None:
+        if trace % 8 or not any(base <= trace and trace + 8 <= base + size for base, size, _, _ in SEGMENTS):
+            raise SystemExit('Invalid _g_exec_trace')
+        definitions.append(f'-DEXEC_TRACE={trace:#x}UL')
+    # Optional: the socrates user-mode abort context array (same kernel patch,
+    # osfmk/arm64/sleh.c + bsd/uxkern/ux_exception.c); kernels without it get
+    # 0 (no fault lines).
+    fault = symbols.get('_g_exec_fault')
+    if fault is not None:
+        if fault % 8 or not any(base <= fault and fault + 64 <= base + size for base, size, _, _ in SEGMENTS):
+            raise SystemExit('Invalid _g_exec_fault')
+        definitions.append(f'-DEXEC_FAULT={fault:#x}UL')
     subprocess.run([clang, '--target=aarch64-none-elf', '-ffreestanding', '-fno-builtin', '-fno-stack-protector',
                     '-mgeneral-regs-only', '-fno-pic', '-mcmodel=tiny', '-Oz', f'-DVINFO={VINFO_VA:#x}UL',
                     *definitions, f'-I{font_dir}', '-c', source, '-o', obj], check=True)
@@ -406,6 +421,10 @@ def main():
         choice, so a kernel that matches it is patched exactly as before.
         """
         panic_budget = PANIC_CAVE_END - (max(CAVES.values()) + CAVE_SIZE)
+        # The panic screen grew with the exec fault lines (2026-11-05): a
+        # relocated layout may host a renderer bigger than the original fixed
+        # padding could hold; the run finder below requires the same padding.
+        panic_budget = max(panic_budget, 0xB00)
         budget = CAVE_SIZE * len(CAVES) + panic_budget
         sites_va = [ENTRY_VA, MMU_ENABLE_VA]
         if not args.no_reset:
@@ -468,6 +487,19 @@ def main():
     else:
         sites.append((AFTER_MMU_VA, 3, {'target': AFTER_MMU_VA + 4}))
         description = f'stage 3 reset {args.reset_delay} s after the MMU is on'
+
+    if args.panic_screen:
+        # The renderer can outgrow the fixed padding (the exec fault lines,
+        # 2026-11-05): measure it before anything is written to the caves; if
+        # the fixed budget cannot hold it, relocate to a bigger zero run even
+        # though the fixed caves are still empty padding.
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _, _ = assemble_c(ROOT / 'scripts/xnu-panic-screen.c',
+                                    max(CAVES[stage] for _, stage, _ in sites) + CAVE_SIZE,
+                                    Path(tmp), kernel_names)
+        if max(CAVES[stage] for _, stage, _ in sites) + CAVE_SIZE + len(code) > PANIC_CAVE_END:
+            print(f'panic screen {len(code):#x} bytes exceeds the fixed padding; relocating caves')
+            relocate_caves()
 
     with tempfile.TemporaryDirectory() as tmp:
         for site, stage, symbols in sites:
