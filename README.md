@@ -94,12 +94,18 @@ bash repro/build-userland-boot.sh                             # WSL 内端到端
 - 下载 **官方线刷包** `socrates_images_OS3.0.304.0.WMKCNXM_..._cn_*.tgz`（约 8.4 GB，从小米官方/MIUI 历史版本站自取，**不入本仓库**——产权归小米）——放到 `firmware/` 下解压
 - 磁盘：另需约 40 GB 空闲
 
-### 1. 取得上游与本仓库
+### 1. 取得本仓库（构建驱动 UniXNU 已随仓库内置，无需再 clone 上游）
 
 ```bash
 mkdir -p ~/unixnu-work && cd ~/unixnu-work
-git clone https://github.com/UniXNU/UniXNU.git
 git clone https://github.com/buzhaodi/mik60proios.git
+# vendor/UniXNU/ 是构建驱动的仓库内正式副本（CLI、scripts、kits、drivers——
+# 含已应用好的 --userland CLI 补丁与 DarwinBoot 诊断补丁，29 MiB）。
+# WSL：直接跑 repro/build-userland-boot.sh，首次会自动从 vendor/ 引导出
+#       ~/unixnu-work/UniXNU；macOS：repro/repro-build-mac.sh 从 monorepo
+#       全量重建工作区（含驱动），无需任何预置 checkout。
+# 剩余的网络输入只有 sha 锁定的 feeds（XNU 源等）与 IPSW 下载——url 与
+# sha256 都在 board.toml / unixnu.lock 里，由 unixnu fetch / ipsw fetch 拉取。
 # 本仓库的两个子仓直接可用：
 #   mik60proios/board/UniXNU-socrates
 #   mik60proios/firmware/uefi-socrates

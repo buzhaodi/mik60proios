@@ -28,6 +28,7 @@ boot.img.orig
 /UniXNU-vermeer/
 /UniXNU-sm8550-common/
 /uefi-vermeer/
+.DS_Store
 
 # WSL 镜像副本
 wsl-copy/
