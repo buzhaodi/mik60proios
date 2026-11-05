@@ -190,9 +190,11 @@ def main():
         check((exec_base, exec_limit) == (text_fileoff, text_filesize),
               'exec segment fields record __TEXT')
 
-        le_off = linkedit_off + 48
-        link_filesize, = struct.unpack_from('<Q', image, le_off)
-        check(link_filesize == len(image), '__LINKEDIT was extended over the signature')
+        link_fileoff, link_filesize = struct.unpack_from('<QQ', image, linkedit_off + 40)
+        check(link_fileoff + link_filesize == len(image),
+              '__LINKEDIT was extended over the signature (filesize is a length: '
+              'fileoff + filesize must end at the file end, or load_segment '
+              'rejects the segment)')
 
         tc = tc_path.read_bytes()
         tc_count, tc_first = struct.unpack_from('<2I', tc, 0)

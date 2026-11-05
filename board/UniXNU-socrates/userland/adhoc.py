@@ -233,10 +233,16 @@ class MachO:
         self.commands.append((lc_end, LC_CODE_SIGNATURE, 16))
         return lc_end
 
-    def set_linkedit_size(self, filesize):
-        off = self.linkedit()
-        if off is None:
-            raise SystemExit('no __LINKEDIT segment')
+    def set_linkedit_size(self, file_end):
+        """Extend __LINKEDIT so the file ends at file_end.
+
+        The filesize field is a LENGTH (fileoff..file_end), not the end
+        offset: XNU's load_segment rejects any segment whose
+        fileoff + filesize exceeds the Mach-O size it was handed
+        (mach_loader.c, first the fileoff+filesize check, then the
+        "section outside code signature" rule)."""
+        off, fileoff, _ = self.segment(b'__LINKEDIT')
+        filesize = file_end - fileoff
         struct.pack_into('<Q', self.data, off + 48, filesize)   # filesize
         struct.pack_into('<Q', self.data, off + 32, (filesize + 0xFFF) & ~0xFFF)  # vmsize
 

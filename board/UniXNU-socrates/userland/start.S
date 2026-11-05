@@ -20,7 +20,16 @@
 _start:
     mov     x29, #0                 // terminate the frame chain for unwinders
     mov     x30, #0
-    mov     x0, sp                  // &argc
+    mov     x0, sp                  // &argc, captured before realigning
+    mov     x17, sp                 // AAPCS64: realign the kernel's initial sp
+    and     x17, x17, #0xf         // down to 16 bytes before any stack access
+    sub     sp, sp, x17            // (exec_copyout_strings sizes sp by the argv/
+                                    // env bytes and left it 8-mod-16 here; SCTLR.SA0
+                                    // trapped the first stp as EXC_ARM_SP_ALIGN
+                                    // (0x103) -> SIGBUS, killing PID 1 at its first
+                                    // stack store - first-boot evidence 2026-11-05).
+                                    // x17 is scratch: the syscall number register,
+                                    // rewritten by every _syscall_raw call.
     bl      _entry
 1:  b       1b                      // _entry never returns
 

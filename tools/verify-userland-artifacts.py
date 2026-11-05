@@ -75,14 +75,15 @@ def main():
         problems += fail('launch file is not a 64-bit Mach-O (0xfeedfacf)')
     mh_flags = struct.unpack_from('<I', launch, 24)[0]
     ncmds = struct.unpack_from('<I', launch, 16)[0]
-    off, commands, unixthread_off, segments = 32, set(), None, []
+    off, commands, unixthread_off, segments, seg_files = 32, set(), None, [], {}
     for _ in range(ncmds):
         command, size = struct.unpack_from('<II', launch, off)
         commands.add(command)
         if command == 0x5:  # LC_UNIXTHREAD: the entry a dyld-less binary needs
             unixthread_off = off
-        if command == 0x19:  # LC_SEGMENT_64: (vmaddr, vmsize)
+        if command == 0x19:  # LC_SEGMENT_64: (vmaddr, vmsize), plus (fileoff, filesize)
             segments.append(struct.unpack_from('<QQ', launch, off + 24))
+            seg_files[launch[off + 8:off + 24].rstrip(b'\0')] = struct.unpack_from('<QQ', launch, off + 40)
         off += size
     for name, code in (('LC_LOAD_DYLINKER', LC_LOAD_DYLINKER), ('LC_LOAD_DYLIB', LC_LOAD_DYLIB),
                        ('LC_CODE_SIGNATURE', LC_CODE_SIGNATURE)):
@@ -114,6 +115,19 @@ def main():
         problems += fail('Mach-O is still PIE: a static RAM-root image has nothing to slide')
     if mh_flags & 0x40000000:   # MH_DYLDLINK
         problems += fail('MH_DYLDLINK still set: the image must not require a dynamic linker')
+    # XNU's load_segment first checks every segment fits the file it was handed
+    # (mach_loader.c: fileoff + filesize > the Mach-O size -> LOAD_BADMACHO,
+    # the SITE-5 exec kill of the 2026-11-05 round), and __LINKEDIT must have
+    # been extended over the signature so it ends exactly at the file end.
+    for name, (fileoff, filesize) in seg_files.items():
+        if fileoff + filesize > len(launch):
+            problems += fail(f'segment {name.decode()} ends at {fileoff + filesize:#x}, past the '
+                             f'{len(launch):#x}-byte file: load_segment rejects it with LOAD_BADMACHO')
+    if b'__LINKEDIT' in seg_files:
+        le_fileoff, le_filesize = seg_files[b'__LINKEDIT']
+        if le_fileoff + le_filesize != len(launch):
+            problems += fail(f'__LINKEDIT does not end at the file end ({le_fileoff:#x}+{le_filesize:#x} '
+                             f'!= {len(launch):#x}): it was not extended over the signature')
 
     # --- the trust cache DarwinBoot validates and AMFI looks the cdhash up in ---
     cache_count, cache_offset = struct.unpack_from('<2I', trustcache, 0)
