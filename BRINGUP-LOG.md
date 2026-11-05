@@ -295,3 +295,209 @@ flavor+count+pc）、`cs_validate_codedirectory` 全部 11 项、全部 13 页�
   （fork 逻辑自动追加 `rd=md0`；`cs_enforcement_disable` 已撤）。
 - **测试协议**：每次 `fastboot boot` 前先完整进一次 Android；全程录像；判读靠色带 + `-v` 文字
   （OCR 只能转录文字，颜色条只能靠眼睛/录像）。
+
+---
+
+## 8.7 第 8 轮准备：把 exec 死因写进 panic 定格屏（2026-11-05 傍晚）
+
+### 8.7.1 为什么 §8.5 第 1 条作废了
+
+上机录像取证（5.35 s、30 fps、76 帧逐帧 OCR）：菜单横幅（0~3.2 s）→ DarwinBoot 交内核横幅
+（3.2~3.8 s）→ `-v` 日志在 ~0.4 s 内高速滚过（全是拖影，30 fps 读不出）→ **panic 渲染器清屏**
+（证据：一帧整屏空白、panic 块逐行重绘、定格块上方无任何 `-v` 文字残留）。两个推论：
+
+1. `proc 1: load code signature error %d for file "/sbin/launchd"` 那行**不在 panic 屏上方**——
+   被清屏抹掉了，"拍整屏照片找它"这条路不存在（§8.5 第 1 条前提作废）。
+2. 内核侧 GENI 串口驱动未移植（README"已知限制"），`-v` 日志唯一出口就是这块被清掉的屏幕。
+
+→ 唯一可靠通道：**把 exec 错误码直接印进 panic 定格块**（240 fps 慢动作重拍理论可行但无法执行，选内核插桩）。
+
+### 8.7.2 机制（全部是 monorepo 内容，v1 板仓补丁）
+
+- **内核埋点** `board/UniXNU-socrates/package/patches/xnu-exec-trace.patch`：mach_loader.c 定义
+  `volatile unsigned long g_exec_trace = 0xE7E37ACE00000000ULL`（高 32 位是 canary，兼保证变量落在
+  file-backed __DATA 段——patcher 符号校验的要求），7 个阶段戳 + 3 个返回码打包进低 32 位：
+  `STAGE | CS_ERR<<8 | MACH_ERR<<16 | LOAD_ERR<<24`。戳位：mach_loader.c（load_machfile 入口、
+  parse_machfile 入口、LC_CODE_SIGNATURE 分发、签名错误 printf 处、签名成功处、parse 返回处）
+  + kern_exec.c（load_machfile 返回处，紧跟 zzz 的 boot-progress stamp 之后）。
+- **v1 补丁机制**：schema v1 板仓**不走** `scripts/unixnu/patches.py` 的 `patch_series`（kernel.py
+  只在 `ctx.schema_version == 2` 时才调 `patches.prepare()`，本板不满足——board.toml 里配了也不生效）。
+  正路是 `build-xnu-4k-baseline.sh` 的补丁循环：feed 序列（`tree/patches/xnu`，名字序）→
+  `kits/NativePrelink/patches` → **新增 `kits/socrates/patches/*.patch` glob**（板仓 package/ 即 kit）。
+- **幂等性坑（实机踩过）**：本补丁的 kern_exec hunk 落在 zzz-boot-progress 的 "load_machfile
+  returned" stamp 与 `if (lret != LOAD_SUCCESS)` 之间，必须进 LATE 反序列表且**排最前**（最新应用的
+  最先反）。不反它，zzz 失去反向能力，连锁把第二遍构建崩在
+  `offline-owner-root-binding-audit @ bsd_init.c:987`（补丁既不在已应用态也应用不上，整个序列失去幂等）。
+- **panic 屏**：`xnu-panic-screen.c` 新增一行 `EXEC=0x…`（blob `0x9ED`→`0xA14` = 2580 字节，预算
+  `0xA30` 内）；`patch-xnu-entry-probe.py` 解析 `_g_exec_trace`（可选符号——没有它的老内核不打印、
+  行为不变）；`check-xnu-panic-screen.py` 加了 fixture 与期望行，本机（brew qemu）QEMU 逐像素自检
+  **6 行全绿**（真实内核符号地址 + 真实编译产物，`EXEC=0xe7e37ace02020204` 按像素命中）。
+
+### 8.7.3 本机（Mac）全链产物
+
+| 产物 | sha256 前 16 |
+| --- | --- |
+| kernel.macho（裸，两遍，sheng bridge 10 个符号） | `2d2fea3082021729` |
+| payload_kernel_sha256（探针+panic 屏打入后） | `736b064f1a8ffce7` |
+| userland launchd cdhash（Apple clang 21） | `dc6ea535b18dedf8`（WSL llvm-18 构建为 `d80d909c`；各自自包含签名，信任缓存链各自一致） |
+| FD（屏幕版，含已验证 DarwinBoot 双改动） | `5a556300e360e076`（全新构建，非上机逐字节验证过的 `a3741876`） |
+| DTB 表（8 块 + 注入节点） | `5c731bfef20c52e1` —— **与上机验证过的逐字节相同** |
+| payload.img | `deeef8cddc165a24` |
+| **boot.img（72,040,448 B）** | `f8400bd6a02a42d1` @ `~/unixnu-work/out/boot-userland/boot.img` |
+
+链路全在本机：kernel 两遍增量重编 → userland（test-adhoc 14 项 + verify-userland-artifacts
+**PASS**）→ payload → firmware → inject-nodes-mac.sh → bootimg。`repro/repro-build-mac.sh` 全量
+复现路径第 1 步整仓拷贝板仓，自动包含本改动；`repro/build-userland-boot.sh`（WSL）已补同步
+scripts/ 与 package/patches/（注意：WSL 侧需先重跑一遍 kernel 两遍——该脚本不重编内核）。
+
+### 8.7.4 上机判读表（panic 屏新增 `EXEC=` 行）
+
+高 32 位应为 `e7e37ace`（canary：证明渲染器读数正常；不是它 = 符号解析错，截图回报）。低 32 位四字节：
+
+| 字节 | 含义 |
+| --- | --- |
+| byte0 STAGE | 1 进了 load_machfile；2 进了 parse_machfile；3 到 LC_CODE_SIGNATURE；**4 签名加载失败（byte1=printf 没能留下的错误码，即 §8.5 想要的那个数）**；5 签名已载入；6 parse 已返回（byte2=返回码）；7 load_machfile 已返回（byte3=返回码） |
+| byte1 CS_ERR | load_code_signature 的 load_return_t |
+| byte2 MACH_ERR | parse_machfile 的 load_return_t |
+| byte3 LOAD_ERR | load_machfile 给 exec 的最终 load_return_t |
+
+LOAD_ 码：0 SUCCESS / 1 BADARCH / **2 BADMACHO** / 3 SHLIB / **4 FAILURE** / 5 NOSPACE / 6 PROTECT /
+7 RESOURCE / 8 ENOENT / 9 IOERROR / 10 DECRYPTFAIL / 11 BADMACHO_UPX。
+
+**判读**：
+- `STAGE=04` + `CS_ERR=N` → 签名链拒绝，N 对号入座（2 → load_code_signature 判 BAD_MACHO，查
+  SuperBlob→CD→cdhash 流水线与 512 字节设备读；4 → 查 cs_validate_* 初页路径）。
+- `STAGE=05`（或 06）→ 签名装好了，死在签名后的校验（cs_validate_range 初页 / mockfs UBC 读入）。
+- `STAGE=07` + `LOAD_ERR=00` → **加载链全通**，BAD_MACHO 死在 exec 加载之后（activate/thread
+  state）；若 AMFI 是凶手，panic 行 namespace 应变 8（SECURITY_POLICY）——即 §8.5 第 4 条的关口。
+- 全 0 → exec 压根没进 load_machfile（前置路径/权限问题，另一种案子）。
+
+### 8.7.5 测试协议增量
+
+- 照常：先完整进一次 Android → `fastboot boot ~/unixnu-work/out/boot-userland/boot.img` → 全程录像。
+- panic 定格后 **`EXEC=` 行就是本轮要的答案**；拍照/录像帧都行，发对话即可 OCR（本地 Vision 流水线
+  可用；flash 模型图片子智能体 2026-11-05 起报 `[1113] 余额不足`，充值前以本地 OCR 替代）。
+- 主机侧复跑渲染器自检：`PATH=/opt/homebrew/opt/llvm/bin:$PATH UNIXNU_UEFI=~/unixnu-work/uefi-socrates
+  python3 board/UniXNU-socrates/scripts/check-xnu-panic-screen.py --candidate
+  ~/unixnu-work/UniXNU/out/socrates/kernel/kernel.macho`。
+
+---
+
+## 8.8 第 8 轮三连闪：exec 全通、__LINKEDIT 真凶归案、PID 1 跑进 EL0（2026-11-05 晚）
+
+### 8.8.1 事实链（三次上机照片，EXEC/FAULT 行都是本地 Vision OCR 读出）
+
+| 轮 | 插桩 | 屏上证据 | 结论 |
+| --- | --- | --- | --- |
+| v1（计数编码） | STAGE=7/CS=0/MACH=2/LOAD=2 | 签名加载无错；parse_machfile 返回 **LOAD_BADMACHO(2)**；初始页校验失败会是 4 —— 排除 | 凶手在 parse_machfile 内 |
+| v2（位掩码+SITE） | SITE=**05**，MACH=2，CS=0 | **load_segment() 在 pass 2 返回 BADMACHO**（pass 1 签名已无错先过） | 凶手是段加载 |
+| 修复上机 | panic 换成 `initproc failed to start -- exit reason namespace 2 subcode 0xa` | **exec 全链通过；PID 1 进 EL0 执行后死于 SIGBUS(10)** | exec 关卡关闭 |
+| v3（EL0 abort 上下文） | FAULT_PC/AT/ESR/SP **全零** | SIGBUS 死了但 **handle_user_abort 从未走到** —— 异常不来自 EL0 硬件 abort | 凶手在别的异常→信号路径 |
+| v4（信号漏斗） | 待上机 | 新增 SIG_CODE/SIG_AT/SIG_INFO + FAULT_K | 见下 |
+
+### 8.8.2 真凶：adhoc.py 的 `__LINKEDIT.filesize` 写成了文件终点
+
+段表 dump + xxd 实证：`__LINKEDIT fileoff 0xC000, filesize 0xD230`（= 整个文件大小 53,808，而非段长 0x1230）
+→ 内核 `load_segment` 的第二道检查 `fileoff + filesize > macho_size` 直接 `LOAD_BADMACHO`
+（0xC000+0xD230=0x1D230 ≫ 0xD230）。根因：`set_linkedit_size(code_limit + datasize)` 把**文件终点**
+当 filesize 直写。test-adhoc.py 的断言 `filesize == len(image)` 还把这个 bug 固化成了规范，三处验证链全漏。
+
+修复（全部 monorepo）：`adhoc.py set_linkedit_size(file_end)` 按段自身 fileoff 求长度；
+`test-adhoc.py` 断言改 `fileoff + filesize == len(image)`；
+`tools/verify-userland-artifacts.py` 新增"每段必须落在文件内 + __LINKEDIT 必须终止于文件尾"两条内核级不变量。
+修复后 userland `__LINKEDIT 0xC000+0x1230=0xD230` ✓，cdhash `3b3521eb…`，上机即通。
+
+**对 §8.3 的连坐修正**：第 6 轮把 BAD_MACHO 归因于 LC_MAIN→needs_dynlinker —— 该修复本身仍然必要
+（否则 LOAD_FAILURE），但第 7/8 轮的 BAD_MACHO 从未"修完过"；v1 的 MACH=2 才首次把两者区分开。
+
+### 8.8.3 里程碑与当前卡点
+
+**exec 正式通关**（研究 agent 取证：上游 UniXNU 的 mockfs+adhoc PID 1 里程碑在 gta4l 真机通过，
+vermeer 的 userland 是同构公开孪生 —— 路线有先例）。现卡点：**PID 1 的某个内存访问触发
+KERN_PROTECTION_FAILURE 类异常 → SIGBUS → init 死于 spawn 窗口内**。v3 证明该异常**没有**走
+EL0 abort 路径（FAULT 全零）；`handle_ux_exception`（bsd/uxkern/ux_exception.c —— Mach 异常→
+UNIX 信号总漏斗）的栈溢出改判逻辑还透露：故障地址**不在** `[user_stack-MAXSSIZ, user_stack)` 栈区间内。
+
+### 8.8.4 v4 插桩（本轮镜像）
+
+- 内核补丁第 4 版（4 文件 21 hunks）：mach_loader.c `g_exec_fault[8]`（双 kind 位：1=EL0 abort,
+  2=信号漏斗）；sleh.c 打点改累积 `|= 1`；**新增 bsd/uxkern/ux_exception.c** —— 在
+  `handle_ux_exception` 投递信号处记 `(code, subcode, exception<<32|signal)`。
+- panic 屏新增：`FAULT_K=`（kind+canary）、`SIG_CODE=`（kern_return）、`SIG_AT=`（**故障地址**）、
+  `SIG_INFO=`（异常类型|信号）。渲染器 0xAEE=2798 字节（重定位预算 3008 内）。
+- 判读表：
+  - `SIG_AT≈0x16FE00000±`（USRSTACK64）→ 默认栈放置/保护问题（sp 落进保护区或栈顶上方 guard）；
+  - `SIG_AT≈0x10000xxxx`（__TEXT/__DATA）→ 页读入/权限问题（W^X、cs_validate 页）；
+  - `SIG_AT≈0x1A0/0x0` → sp 根本没被设好；
+  - `FAULT_K=…01` = 有 EL0 abort（看 FAULT_PC/AT/ESR/SP）；`…02` = 仅信号漏斗；
+  - `SIG_CODE=2` = KERN_PROTECTION_FAILURE（SIGBUS 对应）；`=1` = KERN_INVALID_ADDRESS。
+
+### 8.8.5 产物（v4，全部本机）
+
+内核 `661b9c74ee7c40b9`（裸，两遍，`_g_exec_trace`/`_g_exec_fault` 双符号在案）；
+boot.img `85339780e51545ca`（72,040,448 B，`~/unixnu-work/out/boot-userland/boot.img`）；
+渲染器 0xAEA=2798 字节 → 溢出重定位第二次触发（0x12d0 free）；QEMU 自检 **14 行逐像素 PASS**；
+userland cdhash `3b3521eb…`（__LINKEDIT 修复版，Apple clang 21）。
+WSL 复现：`repro/build-userland-boot.sh` 已同步 scripts/+package/patches（注意先跑 kernel 两遍）。
+
+---
+
+## 8.9 第 9 轮：SIGBUS 归案（EXC_ARM_SP_ALIGN）与第一个存活的 PID 1（2026-11-05 夜）
+
+### 8.9.1 v4 上机解码（FAULT_K/SIG_* 四行）
+
+```
+initproc failed to start -- exit reason namespace 2 subcode 0xa description: no…
+EXEC      = 0xe700000000000077    ← 掩码 0x77：stages 1/2/3/5/6/7 全走，签名加载成功，stage4 未触发
+FAULT_K   = 0xe700000000000002    ← 仅信号漏斗走过（bit0 无：EL0 abort 路径根本没执行！）
+SIG_CODE  = 0x0000000000000103    ← EXC_ARM_SP_ALIGN（osfmk/mach/arm/exception.h:75）"SP Alignment Fault"
+SIG_AT    = 0x000000016FDFFC28    ← 故障地址 = USRSTACK64-0x3D8（栈顶串区）
+SIG_INFO  = 0x000000010000000a    ← EXC_BAD_ACCESS | SIGBUS
+```
+
+**根因链**：`exec_copyout_strings`（kern_exec.c 5700-5748）按 argv/env 字节数从栈顶扣减，
+**没有任何 16 字节对齐**就交付 `*stackp` —— 本次 argv 恰好把 sp 留在 8-mod-16；
+SCTLR=0x…3454593d 的 bit4（SA0，EL0 栈对齐检查）=1；`_entry` 首条
+`stp x26,x25,[sp,#0x190]`（sp-0x50=0x16FDFFC28）触发 SP-alignment trap，
+异常分类器在 `handle_user_abort` **之前**直接 `exception_triage(EXC_BAD_ACCESS, EXC_ARM_SP_ALIGN, addr)`
+（这正是 v3 打点为全零的原因），`ux_exception` 按 code≠KERN_INVALID_ADDRESS 翻成 SIGBUS；
+`handle_ux_exception` 的栈溢出改判要求 code==KERN_PROTECTION_FAILURE(2)，0x103 不满足 → SIGBUS 保持 → init 死。
+
+（顺带解释上一次"直接重启"：sp 的对齐量随 argv/env 布局浮动，那一次开机可能恰好 16 对齐、
+init 跑过了这一关，死在了后面某个会复位的地方 —— 修复后此变量消除。）
+
+### 8.9.2 修复：start.S 防御性对齐（用户态单方修，内核零改动）
+
+`userland/start.S` 在捕获 `x0 = sp`（&argc）之后、任何栈访问之前把 sp 对齐到 16：
+`mov x17, sp; and x17, x17, #0xf; sub sp, sp, x17`（ARM64 逻辑立即数不能写 SP，只能 SUB；
+x17 是 scratch——syscall 号寄存器，每次 `_syscall_raw` 重写）。新 cdhash `9d35be3e…`。
+
+### 8.9.3 🎉 第一个存活的 PID 1（修复版上机）
+
+boot.img `dedc67fb186fd8d6`（内核 `661b9c74` 不变 + 对齐修复 userland）上机：
+**绿（DarwinBoot）→ 蓝（探针 stage1）→ 粉（stage2）→ 黄（civac 前）→ 白（跳转前）全带，
+齿轮 spinner（`-progress`，PE_init_iokit 的 gGearPict）持续转动，无 panic。**
+init 若死必在秒级定格 "initproc failed to start"（v1-v4 四轮皆如此）——
+**spinner 持续转 = PID 1 存活 = 本机第一个自建 adhoc EL0 进程落地。**
+待录像复核：齿轮下方 `-v` 滚动里的 N4KROOT banner（双线框 + PID/UID + sysctl 探针 + /probe.bin motd）与心跳 tick。
+
+### 8.9.4 战役总结与本轮武器资产
+
+八天战役（§8.1-8.9）从"菜单复位"到"第一个活的 EL0 进程"，三关连破全靠 panic 定格屏插桩：
+
+| 关 | 证据通道 | 真凶 | 修复 |
+| --- | --- | --- | --- |
+| exec BAD_MACHO | v1 STAGE/MACH、v2 SITE 位点 | `__LINKEDIT.filesize`=文件终点而非段长 | adhoc.py 语义修正 + 三验证链不变量 |
+| PID 1 SIGBUS | v3 FAULT 全零、v4 SIG_CODE/AT | 内核交付 sp 8-mod-16，SA0 → EXC_ARM_SP_ALIGN | start.S 三指令对齐 |
+| （工具） | EXEC/FAULT_K/SIG_* 上屏 | — | exec-trace v1-v4 内核补丁 + 信号漏斗打点 + 渲染器溢出重定位 |
+
+所有插桩与修复均为 monorepo 内容（`package/patches/xnu-exec-trace.patch`、board scripts、
+userland 三件套），WSL/Mac 双路复现（`repro/build-userland-boot.sh` / `repro/repro-build-mac.sh`）。
+
+### 8.9.5 下一步
+
+1. 录像确认 banner/心跳（§7.6 通关标志逐项），回填 8.9.3；
+2. userland README 的探针清单按需加码（cs op、port、更广 sysctl）；
+3. 下一大关按 §8.5-4：AMFI 平台二进制判定已在身后（签名链已过，AMFI 未拦）——
+   实际下一关自选：存储阶段（APFS/UFS + Apple 原版 launchd，研究 agent 取证的 sheng 路线）
+   或继续深挖自建 userland 的能力清单。
