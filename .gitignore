@@ -5,6 +5,9 @@ Build/
 __pycache__/
 *.pyc
 
+# ---- 引导镜像（成品 .img 不再入库：仓库体积政策，请按 repro/ 脚本自行构建）----
+*.img
+
 # ---- 官方固件与提取物（约 8.4 GB，产权归小米，请自行下载）----
 firmware/*.tgz
 firmware/extracted/

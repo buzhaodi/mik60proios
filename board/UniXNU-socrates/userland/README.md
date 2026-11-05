@@ -44,6 +44,24 @@ struct mockfs_test_header {
 
 限制：整个容器 ≤ 32 MiB（`mockfs_vfsops.c` 的 mountroot 校验）。
 
+## 为什么还要改入口命令（LC_MAIN → LC_UNIXTHREAD）
+
+真机踩过的坑（2026-11-05）：内核一路引导、mockfs 挂根、`load_init_program` 找到了
+`/sbin/launchd`，然后 init 被杀——`unexpected SIGKILL of init ... namespace 9 code 0x1`
+= `OS_REASON_EXEC` / `EXEC_EXIT_REASON_BAD_MACHO`。根因在 `bsd/kern/mach_loader.c`：
+
+- lld 的 `-e _start` 写的是 **LC_MAIN**（entryoff）；
+- 内核**从不读** LC_MAIN 的 entryoff——源码原注释："kernel does *not* use entryoff
+  from LC_MAIN. Dyld uses it."，走这条路径只是把 `needs_dynlinker` 置真；
+- 本镜像没有 dyld（我们特意剥掉了 LC_LOAD_DYLINKER），于是 `parse_machfile` 结尾的
+  `if (result->needs_dynlinker && !dlp) ret = LOAD_FAILURE;` 判死——`load_machfile`
+  失败，exec 以 BAD_MACHO 杀掉 PID 1。
+
+修复：adhoc.py 在签名前把 LC_MAIN 换成 **LC_UNIXTHREAD**（XNU 自己的静态二进制就是
+这个形态）：`arm_thread_state64`（flavor 6、count 68、288 字节），`pc = __TEXT.vmaddr +
+entryoff`，`sp = 0`（`thread_userstack` 把 0 读作"内核放默认栈"）。两条命令都在头部
+空档里手术，之后签名页哈希覆盖的就是最终字节。
+
 ## 为什么要自己签名
 
 Linux CI 上没有 `codesign(1)`，所以 `adhoc.py` 做了它做的两件事：

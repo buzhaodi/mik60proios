@@ -15,11 +15,12 @@
 | XNU 内核首启到 console（vm_init 完成） | ✅ | 2026-11-04 |
 | AMFI 关卡突破（provider-less ApplePMGRNub 桥） | ✅ | 2026-11-04 |
 | **内核完整引导链直到 `Failed to mount root device`**（无存储阶段的预期终点） | ✅ | 2026-11-04 |
-| **首个 EL0 用户态进程（RAM root：rd=md0 + mockfs）** | 🔶 镜像就绪，待上机 | 2026-11-05 |
+| **首个 EL0 用户态进程（RAM root：rd=md0 + mockfs）** | 🔶 内核链/挂根/exec 已通，卡在 exec 的 BAD_MACHO（签名校验链），详见 BRINGUP-LOG §8 | 2026-11-05 |
 | UFS 存储阶段（"系统装上了"） | ⬜ |  |
 | GPU / 显示 / 触摸 | ⬜ |  |
 
-进度估约 **40%**（以"SpringBoard 桌面跑起来"为 100%）。
+进度估约 **40%**（以"SpringBoard 桌面跑起来"为 100%）。RAM-root 攻坚战（2026-11-05，7 轮真机）已根治两个大坑
+（256 MiB 窗口挪位、LC_MAIN 需 dyld），战况与下一步清单见 BRINGUP-LOG §8。
 
 ## 仓库结构
 
@@ -31,39 +32,37 @@ mik60proios/
 ├── firmware/uefi-socrates/  # 固件仓（Mu-Silicium 检出 + socratesPkg，含全部修复）
 ├── tools/                    # 移植过程中自研的诊断 / 注入 / 验证脚本
 ├── docs/                     # ABL 源码级分析、社区先例研究
-└── prebuilt/                 # 可直接 fastboot boot 的成品镜像（省去编译）
+└── prebuilt*/                # 上机记录 .json 清单（镜像二进制不入库，按 repro/ 脚本自建）
 ```
 
 两个子目录保留了**完整的 git 提交历史**——每条提交信息都写明了当时的真机证据（"first-boot hardware evidence"），是本移植的第一手记录。
 
-## 快速开始（不用编译）
+## 快速开始
 
-1. 手机解 BL 锁。
-2. 下载 `prebuilt/boot-userland-boot.img`（RAM root 里程碑）或 `prebuilt/boot-pmgrlate-boot.img`（上一里程碑参照）。
-3. **先完整开机进一次 Android**（详见下方"测试协议"）。
-4. ```bash
-   adb reboot bootloader
-   fastboot boot boot-userland-boot.img
-   ```
-5. 屏幕依次出现：**启动菜单（倒计时 3 秒，默认高亮 `socrates userland: boot to the first EL0 process (rd=md0)`，什么都不按就走它）** → 绿色条（loader handoff）→ 蓝条（内核入口探针）→ 红紫条（MMU 开启探针）→ `-v` 内核日志向上滚（中央有 XNU 原生白色齿轮转圈：`-progress` 引导参数点亮内核自带的 Apple 开机素材）→ mockfs 把 `md0` 挂成根 → **PID 1 用户态 banner**：
+> **镜像不入库**（仓库体积政策，2026-11-05 起）：`prebuilt*/` 里只有上机记录用的 `.json` 清单。
+> 可刷写的 boot.img 请按 `repro/build-userland-boot.sh`（WSL 内端到端一条龙）或下方"完整复现"
+> §3.6b 自行构建。**每次 `fastboot boot` 前必须先完整开机进一次 Android**（见"测试协议"）。
 
-   ```
-   ==================================================
-    socrates userland  pid=1 ppid=0 uid/euid: 0/0
-   ==================================================
-   （sysctl 探针：核数 / 页大小 / 内存 / 内核版本串）
-   （1 MiB 匿名内存逐页写入读回校验 —— EL0 的 VM 通路）
-   （/probe.bin 读回 motd —— 根是真文件系统的证据）
-   hb: tick ... （心跳进程）
-   ```
+```bash
+# 构建出 out/boot-userland/boot.img 后：
+adb reboot bootloader
+fastboot boot out/boot-userland/boot.img
+```
 
-   之后是壳（没键盘会提示 `connect a keyboard or the ... driver`）——**见到 banner 就是本里程碑的通关标志**。
+屏幕依次出现：**启动菜单（倒计时 3 秒，默认高亮 `socrates userland: boot to the first EL0 process (rd=md0)`，
+什么都不按就走它）** → 绿色条（loader handoff）→ 黄/青/白条（DarwinEnter 分段遥测：窗口清洗前/后/跳转前）→
+蓝条（内核入口探针）→ 紫条（MMU 探针）→ `-v` 内核日志向上滚（中央有 XNU 原生白色齿轮转圈：`-progress`）→
+mockfs 把 `md0` 挂成根 → **PID 1 用户态 banner**（双线框 + sysinfo 探针 + 1 MiB 内存校验 + motd + 心跳）。
 
-   > 上一里程碑的终点（`Failed to mount root device` 定屏）仍然一步可达：菜单倒计时里按上/下键选 `socrates first boot: source 4K XNU to console` 条目。
+> 当前战况（2026-11-05）：内核链/挂根/exec 已全部跑通，PID 1 在 exec 处被
+> `EXEC_EXIT_REASON_BAD_MACHO` 拒绝，凶手锁定在签名校验链——判读与下一步见 **BRINGUP-LOG §8**。
+> 上一里程碑的终点（`Failed to mount root device`）仍在菜单里一键可达（`xnu` 条目）。
 
 ## RAM root 用户态镜像：里面装了什么
 
-`boot-userland-boot.img` 与上机验证过的 `boot-pmgrlate-boot.img` **除 payload 卷外逐字节相同**（FD `a3741876…`、DTB 表 `5c731bfe…`、内核段 `e5909857…` 全部同 sha，复现脚本里从上一镜像原样解出 FD 再打包）。变化全在 64 MiB 的 FAT 卷里：
+`repro/build-userland-boot.sh` 产出的 boot.img 构成：**BootShim + 固件 FD（`44c152c1…`：屏幕控制台 + 两处
+DarwinBoot 改动——固定 256 MiB 窗口落 `0x880000000` 避开"DRAM gap 0xC7CC0000"未知洞 + 绿条后的黄/青/白
+分段遥测）** + 8 块 vendor DTB 表（`5c731bfe…`）+ 64 MiB FAT 卷：
 
 | 卷内 | 作用 |
 | --- | --- |

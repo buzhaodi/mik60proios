@@ -118,18 +118,15 @@ Failed to mount root device @IOKitBSDInit.cpp:984
 
 ## 6. 复现战果的镜像
 
-`prebuilt/boot-pmgrlate-boot.img`（72 MB，v0，boot.json `kernel_sha256 e5909857...`，卷内内核为当时构建的探针版）：
-```
-fastboot boot boot-pmgrlate-boot.img    # 前置：先进一次 Android！
-```
+> **2026-11-05 起镜像二进制不再入库**（仓库体积政策，`.gitignore` 已加 `*.img`）：`prebuilt*/` 里只保留
+> `.json` 清单作为上机记录（内核/ramdisk/FD/DTB 各段 sha、大小、`hardware_tested` 标志）。要拿可刷写的
+> 镜像请按 `README` §完整复现 或 `repro/build-userland-boot.sh` 自行构建。git 历史里的旧 img 不追删；
+> 如需彻底瘦身历史（filter-repo 重写）属于破坏性操作，由仓库所有者自行决定。
 
-`prebuilt/boot-userland-boot.img`（72 MB，v0，2026-11-05，首个 EL0 里程碑）：FD/DTB/内核段与上机验证过的
-boot-pmgrlate **逐字节同 sha**，只有 payload 卷换了——多一个 `Payloads/userland.img`（N4KROOT 容器，内含
-ad-hoc 签名的静态 `launchd.macho`，cdhash `d9ea65f7...`）和它自己的信任缓存，菜单多出 `userland`（默认）
-与 `userland-full` 两条目。
-```
-fastboot boot boot-userland-boot.img    # 前置：先进一次 Android！
-```
+`boot-pmgrlate-boot.json`（上机验证到 `Failed to mount root device` 的那一版）：FD `a3741876...`、
+DTB `5c731bfe...`、boot 镜像内核段 `e5909857...`。
+
+`boot-userland-boot.json`（首个 EL0 里程碑初版，见 §8 的失败与修复记录）。
 
 ---
 
@@ -202,3 +199,99 @@ SpringBoard 真桌面本阶段不可行（APFS 块设备/Apple 签名链/SEP key
   没吃进去（查 ADT RAMDisk 占位符被 loader 填了没有）；panic 文字 = 直接线索；"花纹" = pre-console panic。
 - 菜单里 `userland-full` 是**已知会 ASSERT 的对照项**（完整探针行撞 same-EL data abort，见 board.toml
   注释）——不要拿它做首测；`xnu` 条目是上一里程碑的一键复现。
+
+---
+
+## 8. 首个 EL0 攻坚战（2026-11-05，7 轮真机判别）——交接记录
+
+> 本节是完整战况记录与交接文档。所有判别镜像的 .img 已按仓库政策删除，`.json` 清单留在 `prebuilt-test/`。
+
+### 8.1 七轮判别地图
+
+| # | 镜像 | 问的问题 | 真机结果 | 结论 |
+| --- | --- | --- | --- | --- |
+ | 1 | `boot-userland-boot.img`（20b8a3e，proven FD） | 里程碑镜像能过吗 | 绿条后复位，无蓝条 | 失败基线确立 |
+ | 2 | `boot-pmgrlate-boot.img`（proven） | 手机态干净吗 | ✅ 停在 `Failed to mount root device` | 状态干净 |
+ | 3 | `boot-kcheck-console.img`（同内核 86574694、无 userland、全参数） | 重编内核有毒吗 | ✅ 同上 | **内核重编嫌疑洗清** |
+ | 4 | `boot-userland-fullargs.img`（userland+全参数行） | 最小参数行的锅吗 | ✗ 同 #1 死法 | **参数行嫌疑洗清** |
+ | 5 | `boot-v2-trustcache.img`（只带 56B 信任缓存） | ramdisk 还是信任缓存 | ✗ 复位 | **多读任何一个文件即触发** |
+ | 6 | `boot-diag-trustcache.img` / `boot-diag-userland.img`（诊断 FD：Entry.S 分段色带） | 死在哪一段 | ✅ 全链跑通！userland 版跑到 exec，PID 1 被杀 `EXEC_EXIT_REASON_BAD_MACHO` | **窗口挪位理论实锤** + exec 首次执行 |
+ | 7 | `boot-diag-userland-v2/v3/v4.img` | LC_UNIXTHREAD 修复 + 固定窗口 | v3 起内核每轮全通，但 exec 仍 BAD_MACHO；v4 证明 `cs_enforcement_disable` 被 AMFI 封杀 | **窗口已根治；exec 签名校验链是最后关卡** |
+
+### 8.2 坑 #3（已根治）：256 MiB 内核窗口挪位
+
+**机制**：DarwinBoot `AllocateWindow` 对 UEFI 内存图 first-fit 扫描。板子的 UEFI 内存图
+（`socratesPkg/Library/MemoryMapLib/MemoryMapLib.c`）里 4 GiB 以下唯一能容纳 256 MiB 窗口的
+"可分配"连续区 = DXE Heap（0xBAB00000，209 MiB）+ **"DRAM gap 0xC7CC0000"（208 MiB，注释自认是
+"非 stock cfg 非 DT 覆盖的洞，因 stock 也从这里分配而保留为 Conv"）**拼起来的 402 MiB。任何窗口
+必然吃进这段未知归属的洞；payload 卷里**多读任何一个文件**（哪怕 56 字节信任缓存 → 一个 4 KiB 池）
+都分裂空闲表、改变 first-fit 落点，且每次开机本身也有波动——窗口在洞里滚骰子，滚到保护区上，
+`DarwinEnter` 对全窗口 `dc civac` 清洗撞**异步外部中止**（灾难延迟到青带画完才递达，所以 #7 的 v2
+看到"绿+黄+青在、白和蓝不在"），复位。
+
+**修复（已在 tools/darwinboot-socrates-diag.patch 固化，两处）**：
+1. `Entry.S`：绿条后加黄（civac 前）/青（civac 后）/白（跳转前）三条带——无串口时代的分段遥测，保留为常规工具；
+2. `DarwinBoot.c`：`AllocateWindow` 优先固定落在 `0x880000000`（"DRAM bank 1 low"，947 MiB 整段无洞）
+   + 横幅新增 `window 0x… fixed/scan` 行。v3 起内核每轮全通，**窗口问题关闭**。
+
+**后续根治（未做）**：MemoryMapLib 把 `DRAM gap 0xC7CC0000` 改 Reserv（则 4 GiB 下无 256 MiB 连续区，
+窗口必然走 >4G bank——需先验证该 bank 在本机真实可用）；补洞后可把固定窗口改回扫描。上游化方向：
+把"固定窗口 + 洞避让"回馈 UniXNU 社区。
+
+### 8.3 坑 #4（已修复）：LC_MAIN 需要一个不存在的 dyld
+
+第 6 轮首次跑到 exec，PID 1 被 `OS_REASON_EXEC`/`EXEC_EXIT_REASON_BAD_MACHO`（namespace 9 code 1）杀。
+源码逐行取证：lld `-e _start` 写 **LC_MAIN**；内核从不读它的 entryoff（mach_loader.c 原注释
+"kernel does *not* use entryoff from LC_MAIN. Dyld uses it."），该路径只置 `needs_dynlinker`；
+我们剥了 LC_LOAD_DYLINKER → `parse_machfile` 末尾 `needs_dynlinker && !dlp → LOAD_FAILURE` →
+exec 以 BAD_MACHO 杀 init。**修复**：`userland/adhoc.py` 第三步手术 `main_to_unixthread()`——
+LC_MAIN 换成 288 字节 LC_UNIXTHREAD（arm_thread_state64：flavor 6/count 68/sp=0 内核放默认栈/
+pc=__TEXT.vmaddr+entryoff=0x100004000）。test-adhoc.py/build.sh(头空档 16→304)/CI userland.yml/
+tools/verify-userland-artifacts.py 全部加了对应用例。新 cdhash `d80d909c…`（旧 `d9ea65f7` 作废）。
+（顺带修了 test-adhoc.py 合成二进制 dyld 命令声明尺寸错误：声明 40 实际 28，LC_MAIN 落跳跃死区。）
+
+### 8.4 当前战况（交接点，2026-11-05 午后）
+
+**已经通的**：菜单 → 绿/黄/青/白带 + 蓝/紫探针条 → `-v` 日志 → **mockfs 把 md0 挂成根**（N4KROOT 容器）→
+`load_init_program` 找到 `/sbin/launchd` → **进入 exec**。
+
+**卡住的**：exec 的 `load_machfile` 仍以 BAD_MACHO 拒绝这个二进制（LC_UNIXTHREAD 修复后依旧）。
+主机端已逐条复现并排除：parse_machfile 全部结构检查（段表/PAGEZERO prot=0/对齐/W^X/LC_UNIXTHREAD
+flavor+count+pc）、`cs_validate_codedirectory` 全部 11 项、全部 13 页哈希、mockfs 块算术
+（`DEV_BSIZE=512`，4096 对齐无偏移）、卷内字节逐层抽验（LC_UNIXTHREAD 在、cdhash==信任缓存条目）。
+
+**剩余嫌疑**（主机不可完全复现的运行时路径，按可能性排序）：exec 时 `cs_validate_range` 对
+"初始页"的校验（mockfs+UBC 页面读入交互）、`load_code_signature` 内部、或某个我复现遗漏的结构检查。
+
+**已封死的路**：`cs_enforcement_disable=1`（v4）→ AMFI 直接 panic
+`"can't has cs_enforcement_disable" @AppleMobileFileIntegrity.cpp:5261`——此判别法作废，参数已从板仓撤除。
+
+### 8.5 下一步清单（接手人从这里开始）
+
+1. **最高价值、零成本：拿 -v 滚动文字**。内核在签名加载失败时**无条件打印**
+   `proc 1: load code signature error %d for file "/sbin/launchd"`（mach_loader.c:1305）——它就在
+   `unexpected SIGKILL` panic 屏**上方的滚动日志里**，翻录像逐帧就有。这行直接写明凶手。
+2. 若是签名链：查 mockfs 的 UBC 页读入（`cs_validate_range` 校验的"初始页"字节源）、
+   `load_code_signature` 的 SuperBlob→CD→cdhash 流水线与 512 字节设备读的交互。
+3. 若无打印（纯结构拒绝）：给 `parse_machfile`/`load_segment` 的每个 `LOAD_BADMACHO` 出口加无条件
+   printf（内核重编，两遍构建见 README §3.4；`macho_printf` 只是 sysctl，PID 1 活不过去，改不了）。
+4. exec 过了 load 这关后，下一个关口是 AMFI 的平台二进制判定：看 kill code 是否变成
+   `SECURITY_POLICY(8)`；若 AMFI 拒绝，查我们信任缓存条目的"类别字节"语义（adhoc.py 用 HASH_TYPE=2，
+   AMFI 的 platform-only 模式可能要求 platform 类）。
+5. 窗口雷的根治与上游化（见 8.2）。
+
+### 8.6 环境与资产交接
+
+- **构建环境**：WSL2 Ubuntu（用户 `yang`），`~/unixnu-work/{UniXNU, UniXNU-socrates, uefi-socrates}`；
+  代理 `http://127.0.0.1:10808`；`ld64.lld` 在 `/usr/lib/llvm-18/bin/`；mtools 齐备；增量固件重建 ~3 分钟。
+  新机器按 `README §完整复现` 重建；`tools/wsl-setup.sh` + `tools/restore-uefi-submodules.sh` 可复用。
+- **本地修改（不在任何上游仓）**：①UniXNU CLI 的 `--userland` 补丁（`tools/unixnu-userland-payload.patch`
+  + 幂等应用脚本）；②DarwinBoot 的色带+固定窗口（`tools/darwinboot-socrates-diag.patch`，基底
+  `3c75734` + 幂等应用脚本）。两个 apply 脚本 `repro/build-userland-boot.sh` 都会自动调用。
+- **关键产物 sha**（WSL 树现状）：内核 `out/socrates/kernel/kernel.macho` = `668c0eb5…`（探针补丁
+  确定性：payload 后 `86574694…`）；userland cdhash `d80d909c…`（launchd `b239bc28…`、容器
+  `78656e7a…`）；诊断+固定窗口 FD = `44c152c1…`（`SOCRATES_SERIAL_CONSOLE=0` 屏幕控制台版）。
+- **板仓 `userland_args` 现值**：`-v -progress serial=3 debug=0x14e kt_fixed_zones=120 sheng-pmgr=2`
+  （fork 逻辑自动追加 `rd=md0`；`cs_enforcement_disable` 已撤）。
+- **测试协议**：每次 `fastboot boot` 前先完整进一次 Android；全程录像；判读靠色带 + `-v` 文字
+  （OCR 只能转录文字，颜色条只能靠眼睛/录像）。

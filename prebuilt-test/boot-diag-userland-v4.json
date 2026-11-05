@@ -1,0 +1,13 @@
+{
+  "kernel_sha256": "9eeb1cbf51cf72e616f66486cd89b8afd5acf476712f1091db374bfe6fa5df26",
+  "ramdisk_bytes": 67108864,
+  "header_version": 0,
+  "kernel_address": "0x8000",
+  "tags_address": "0x1e00000",
+  "image_sha256": "bddfbfbb773372d8e40136d43cbedc4d581c393ece19e93590fc5bfec6dc0068",
+  "image_bytes": 72032256,
+  "fd_sha256": "44c152c11f0fbaa903fa7eeeeeee8cddf18ec77f30a7ae8d642a5e5b72cc4e98",
+  "dtb_sha256": "5c731bfef20c52e139515296c92af7f6bc8da7817495f295d95236eb9dbafcce",
+  "shim_bytes": 192,
+  "hardware_tested": false
+}

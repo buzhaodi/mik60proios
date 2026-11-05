@@ -2,13 +2,13 @@
 # Milestone "RAM root -> first EL0 process": build the boot image whose payload
 # carries userland.img (the N4KROOT container XNU's mockfs mounts as rd=md0 and
 # execs as PID 1). Run INSIDE WSL, like the other repro scripts - it expects the
-# ~/unixnu-work tree of the bring-up session (built kernel + uefi-socrates).
+# ~/unixnu-work tree of the bring-up session (fetched feeds; the kernel step must
+# have produced out/socrates/kernel/kernel.macho once).
 #
-# Kernel: NOT rebuilt. The payload stages the existing out/socrates/kernel/kernel.macho
-# (probe bars + panic screen re-applied by the payload step) and the boot image packs
-# the FD extracted from prebuilt/boot-pmgrlate-boot.img, so everything outside the
-# payload volume is byte-identical to the image that reached "Failed to mount root
-# device" on hardware (fd a3741876..., dtb 5c731bfe..., kernel section e5909857...).
+# Kernel: NOT rebuilt here. The payload stages the existing out/socrates/kernel/kernel.macho
+# (probe bars + panic screen re-applied by the payload step). The firmware is built
+# fresh with the two hardware-validated DarwinBoot changes applied below.
+# The image is not committed to this repository - flash it from the build output.
 set -e
 cd /home/yang/unixnu-work/UniXNU
 export http_proxy=http://127.0.0.1:10808 https_proxy=http://127.0.0.1:10808
@@ -18,6 +18,10 @@ MONO=/mnt/d/gittest/mik60proios
 
 # 1. CLI: --userland is not in upstream main; apply the ported fork patch (idempotent).
 bash "$MONO/tools/apply-unixnu-userland-patch.sh" /home/yang/unixnu-work/UniXNU
+
+# 1b. Loader: the fixed 256 MiB window (0x880000000) and the handoff stage bands,
+#     both hardware-validated 2026-11-05 (idempotent).
+bash "$MONO/tools/apply-darwinboot-socrates-patch.sh" /home/yang/unixnu-work/UniXNU/drivers/DarwinBoot
 
 # 2. board: sync board.toml and the userland kit from the published monorepo copy.
 cp "$MONO/board/UniXNU-socrates/board.toml" "$BOARD/board.toml"
@@ -38,34 +42,20 @@ python3 unixnu build payload --uefi $UEFI -D "$BOARD" \
   --owner-trust-cache "$BOARD/userland-build/kernel.macho.trustcache" \
   --unique-chip-id 0000000000000001
 
-# 5. FD: the uefi-socrates Build tree holds the SERIAL-console variant (the flag is
-# back to 0 in the dsc, but the built volume is the serial one). Unpack the screen-
-# console FD byte-exact from the device-proven prebuilt instead of rebuilding it.
-python3 - <<'EOF'
-import struct, zlib, hashlib
-d = open("/mnt/d/gittest/mik60proios/prebuilt/boot-pmgrlate-boot.img", "rb").read()
-ksize = struct.unpack_from("<I", d, 8)[0]
-page = struct.unpack_from("<I", d, 36)[0]
-kernel = d[page:page + ksize]
-data = zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(kernel)
-fd = data[192:192 + 3145728]
-digest = hashlib.sha256(fd).hexdigest()
-assert digest == "a3741876d887326bd0cd5958abcc1cc9fda8d5299e7adf8a40bda8dea01e498d", digest
-open("/tmp/fd-proven.fd", "wb").write(fd)
-print("fd unpacked from the proven prebuilt:", digest)
-EOF
+# 5. FD: build it fresh. The dsc serial flag is 0, so this is the screen-console
+#    build, and it carries the two hardware-validated DarwinBoot changes
+#    (fixed window at 0x880000000 + the handoff stage bands) applied in step 5b.
+python3 unixnu build firmware --uefi $UEFI -D "$BOARD"
 
-# 6. boot image: same kernel section (shim+FD gzip, e5909857...), same DTB table,
-#    new RAM-root payload volume.
+# 6. boot image: BootShim + FD + DTB table + the RAM-root payload volume.
+#    The image is NOT committed to this repository (see README "prebuilt images"):
+#    flash it from the build output.
 mkdir -p /mnt/d/gittest/unixnu-work/out/boot-userland
 python3 unixnu bootimg --uefi $UEFI -D "$BOARD" \
-  --fd /tmp/fd-proven.fd \
+  --fd $UEFI/Build/socratesPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd \
   --dtb /mnt/d/gittest/unixnu-work/out/socrates-all-dtbs.dtb \
   --ramdisk out/socrates/payload/payload.img \
   -o /mnt/d/gittest/unixnu-work/out/boot-userland/boot.img
 
-# 7. deliver as the milestone prebuilt.
-cp /mnt/d/gittest/unixnu-work/out/boot-userland/boot.img  "$MONO/prebuilt/boot-userland-boot.img"
-cp /mnt/d/gittest/unixnu-work/out/boot-userland/boot.json "$MONO/prebuilt/boot-userland-boot.json"
-sha256sum "$MONO/prebuilt/boot-userland-boot.img"
-echo "== DONE: prebuilt/boot-userland-boot.img (fastboot boot, after one full Android boot)"
+sha256sum /mnt/d/gittest/unixnu-work/out/boot-userland/boot.img
+echo "== DONE: out/boot-userland/boot.img (fastboot boot, after one full Android boot)"

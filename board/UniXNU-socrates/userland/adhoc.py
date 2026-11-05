@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """Sign a static Mach-O ad-hoc and emit the trust cache that names it.
 
-Linux CI has no codesign(1), so this does the two things codesign would have
-done for us:
+Linux CI has no codesign(1), so this does what codesign would have done for us,
+plus one thing the linker should have done for a dyld-less binary:
 
+  * replace LC_MAIN with LC_UNIXTHREAD: the kernel never reads LC_MAIN's
+    entryoff ("kernel does *not* use entryoff from LC_MAIN. Dyld uses it.",
+    bsd/kern/mach_loader.c) - the LC_MAIN path only sets needs_dynlinker, so a
+    static binary with no LC_LOAD_DYLINKER fails parse_machfile at the
+    "needs_dynlinker && !dlp" check, and exec kills PID 1 with
+    EXEC_EXIT_REASON_BAD_MACHO;
   * append an LC_CODE_SIGNATURE whose SuperBlob holds one CodeDirectory, with a
     SHA-256 hash per 4 KiB page over everything before the signature;
   * report the cdhash, which is the SHA-256 of the CodeDirectory blob truncated
@@ -31,6 +37,11 @@ LC_LOAD_DYLIB = 0x0C
 LC_LOAD_WEAK_DYLIB = 0x80000018
 LC_REEXPORT_DYLIB = 0x8000001F
 LC_LAZY_LOAD_DYLIB = 0x20
+LC_MAIN = 0x80000028
+LC_UNIXTHREAD = 0x5
+ARM_THREAD_STATE64 = 6                 # osfmk/mach/arm/thread_status.h
+ARM_THREAD_STATE64_COUNT = 68          # sizeof(arm_thread_state64_t)/4, _structs.h
+UNIXTHREAD_BYTES = 16 + 272            # cmd, cmdsize, flavor, count + the state
 MH_NOUNDEFS = 0x1
 MH_DYLDLINK = 0x4
 MH_PIE = 0x200000
@@ -155,6 +166,57 @@ class MachO:
         struct.pack_into('<I', self.data, 24, self.flags)
         return removed
 
+    def main_to_unixthread(self):
+        """Replace LC_MAIN with LC_UNIXTHREAD, the entry a dyld-less binary needs.
+
+        load_unixthread (bsd/kern/mach_loader.c) reads an arm_thread_state64
+        (flavor ARM_THREAD_STATE64, count 68): its pc becomes the entry point,
+        and sp == 0 tells thread_userstack (osfmk/arm64/status.c) to place the
+        stack at the default - exactly the shape XNU's own static binaries use.
+        Returns the new pc, or None when the binary already carries
+        LC_UNIXTHREAD (or no entry command at all, which is an error the kernel
+        would raise anyway).
+        """
+        off, _ = self.find(LC_MAIN)
+        if off is None:
+            if self.find(LC_UNIXTHREAD)[0] is not None:
+                return None
+            raise SystemExit('no LC_MAIN and no LC_UNIXTHREAD: the kernel would refuse this binary in parse_machfile')
+        entryoff, = struct.unpack_from('<Q', self.data, off + 8)
+        text_off, text_fileoff, _ = self.segment(b'__TEXT')
+        text_vmaddr, = struct.unpack_from('<Q', self.data, text_off + 24)
+        pc = text_vmaddr + entryoff - text_fileoff
+        # Compact the command table without LC_MAIN, as normalize_static does.
+        kept = [(o, c, s) for o, c, s in self.commands if o != off]
+        blob = bytearray()
+        rebuilt = []
+        for o, c, s in kept:
+            rebuilt.append((32 + len(blob), c, s))
+            blob += self.data[o:o + s]
+        old_end = 32 + self.sizeofcmds
+        self.data[32:old_end] = b'\0' * (old_end - 32)
+        self.data[32:32 + len(blob)] = blob
+        self.commands = rebuilt
+        self.ncmds = len(rebuilt)
+        self.sizeofcmds = len(blob)
+        # The new command goes into the header padding - LC_CODE_SIGNATURE needs
+        # its 16 bytes behind it in the same gap (add_code_signature_command).
+        lc_end = 32 + self.sizeofcmds
+        if self.first_content_offset() - lc_end < UNIXTHREAD_BYTES + 16:
+            raise SystemExit('no room in the header for LC_UNIXTHREAD and the signature command')
+        state = bytearray(272)              # x0..x28, fp, lr, sp, cpsr, flags
+        struct.pack_into('<Q', state, 248, 0)      # sp: 0 = kernel default stack
+        struct.pack_into('<Q', state, 256, pc)    # pc: the entry point
+        cmd = struct.pack('<IIII', LC_UNIXTHREAD, UNIXTHREAD_BYTES,
+                          ARM_THREAD_STATE64, ARM_THREAD_STATE64_COUNT) + bytes(state)
+        self.data[lc_end:lc_end + UNIXTHREAD_BYTES] = cmd
+        self.ncmds += 1
+        self.sizeofcmds += UNIXTHREAD_BYTES
+        struct.pack_into('<I', self.data, 16, self.ncmds)
+        struct.pack_into('<I', self.data, 20, self.sizeofcmds)
+        self.commands.append((lc_end, LC_UNIXTHREAD, UNIXTHREAD_BYTES))
+        return pc
+
     def add_code_signature_command(self):
         """Put LC_CODE_SIGNATURE in the header padding. Returns its offset."""
         off, _ = self.find(LC_CODE_SIGNATURE)
@@ -253,6 +315,9 @@ def main():
         removed = macho.normalize_static()
         if removed:
             print('removed load commands: ' + ', '.join(f'0x{c:08x}' for c, _ in removed))
+        pc = macho.main_to_unixthread()
+        if pc is not None:
+            print(f'converted LC_MAIN to LC_UNIXTHREAD: pc {pc:#x}')
         lc = macho.add_code_signature_command()
 
         # __TEXT is the executable segment; its (fileoff, filesize) is what the

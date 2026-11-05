@@ -152,6 +152,25 @@ jobs:
               print(f'{"has" if code in cmds else "no "} {name}')
           if 0x0e in cmds or 0x0c in cmds or 0x1d not in cmds:
               print('load commands are not those of a signed static image'); ok = False
+          # The entry must be LC_UNIXTHREAD (the kernel never reads LC_MAIN -
+          # mach_loader.c: dyld does - and the LC_MAIN path demands a dyld this
+          # root does not have): an arm_thread_state64, 288 bytes, flavor 6,
+          # count 68, sp 0 so the kernel places the default stack.
+          if 0x80000028 in cmds or 0x5 not in cmds:
+              print('entry command is not LC_UNIXTHREAD'); ok = False
+          else:
+              off, found = 32, None
+              for _ in range(ncmds):
+                  cmd, size = struct.unpack_from('<II', m, off)
+                  if cmd == 0x5:
+                      found = off
+                  off += size
+              ut_size, ut_flavor, ut_count = struct.unpack_from('<3I', m, found + 4)
+              ut_sp, ut_pc = struct.unpack_from('<QQ', m, found + 16 + 248)
+              if not (ut_size == 288 and ut_flavor == 6 and ut_count == 68 and ut_sp == 0):
+                  print('LC_UNIXTHREAD is not a valid arm_thread_state64'); ok = False
+              else:
+                  print(f'LC_UNIXTHREAD ok: pc 0x{ut_pc:x}')
           if b'\xfa\xde\x0c\xc0' not in m:
               print('no embedded signature SuperBlob'); ok = False
           tc = pathlib.Path('userland-build/kernel.macho.trustcache').read_bytes()

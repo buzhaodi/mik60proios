@@ -86,8 +86,10 @@ if [ "$linked" -ne 1 ]; then
     exit 1
 fi
 
-# The signing step needs room in the header. Check it here so a missing pad is a
-# build error with an explanation, not a signature the kernel will refuse.
+# The signing step needs room in the header: adhoc.py converts LC_MAIN into a
+# 288-byte LC_UNIXTHREAD and then inserts the 16-byte LC_CODE_SIGNATURE, both in
+# the padding. Check it here so a missing pad is a build error with an
+# explanation, not a signature the kernel will refuse.
 python3 - "$out/launchd.macho" <<'PY'
 import struct, sys
 data = open(sys.argv[1], 'rb').read()
@@ -107,8 +109,8 @@ for _ in range(ncmds):
             sect += 80
     off += size
 gap = low - (32 + sizeofcmds)
-print(f'header gap: {gap} bytes')
-sys.exit(0 if gap >= 16 else 1)
+print(f'header gap: {gap} bytes (need 304: LC_UNIXTHREAD 288 + LC_CODE_SIGNATURE 16)')
+sys.exit(0 if gap >= 304 else 1)
 PY
 
 python3 "$here/adhoc.py" "$out/launchd.macho" \

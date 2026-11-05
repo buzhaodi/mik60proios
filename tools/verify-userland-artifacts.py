@@ -75,14 +75,35 @@ def main():
         problems += fail('launch file is not a 64-bit Mach-O (0xfeedfacf)')
     mh_flags = struct.unpack_from('<I', launch, 24)[0]
     ncmds = struct.unpack_from('<I', launch, 16)[0]
-    off, commands = 32, set()
+    off, commands, unixthread_off, segments = 32, set(), None, []
     for _ in range(ncmds):
         command, size = struct.unpack_from('<II', launch, off)
         commands.add(command)
+        if command == 0x5:  # LC_UNIXTHREAD: the entry a dyld-less binary needs
+            unixthread_off = off
+        if command == 0x19:  # LC_SEGMENT_64: (vmaddr, vmsize)
+            segments.append(struct.unpack_from('<QQ', launch, off + 24))
         off += size
     for name, code in (('LC_LOAD_DYLINKER', LC_LOAD_DYLINKER), ('LC_LOAD_DYLIB', LC_LOAD_DYLIB),
                        ('LC_CODE_SIGNATURE', LC_CODE_SIGNATURE)):
         print(f'launch:    {"has" if code in commands else "no "} {name}')
+    # The kernel never reads LC_MAIN (mach_loader.c: dyld does) and its path
+    # sets needs_dynlinker - with no dyld, parse_machfile fails and exec kills
+    # PID 1 with EXEC_EXIT_REASON_BAD_MACHO. The entry must be LC_UNIXTHREAD.
+    if 0x80000028 in commands:
+        problems += fail('LC_MAIN is still present: the kernel demands a dyld it does not have')
+    if unixthread_off is None:
+        problems += fail('no LC_UNIXTHREAD: the kernel has no entry point to start PID 1 at')
+    else:
+        ut_cmd, ut_size, ut_flavor, ut_count = struct.unpack_from('<4I', launch, unixthread_off)
+        ut_sp, ut_pc = struct.unpack_from('<QQ', launch, unixthread_off + 16 + 248)
+        print(f'launch:    LC_UNIXTHREAD flavor {ut_flavor}, pc {ut_pc:#x}')
+        if not (ut_size == 288 and ut_flavor == 6 and ut_count == 68):
+            problems += fail('LC_UNIXTHREAD is not an arm_thread_state64 (288 bytes, flavor 6, count 68)')
+        if ut_sp != 0:
+            problems += fail('LC_UNIXTHREAD sp is not 0 (the kernel places the default stack)')
+        if not any(vmaddr <= ut_pc < vmaddr + vmsize for vmaddr, vmsize in segments):
+            problems += fail('LC_UNIXTHREAD pc is outside the mapped segments')
     if LC_LOAD_DYLINKER in commands or LC_LOAD_DYLIB in commands:
         problems += fail('dynamic load commands present: this root has no dyld')
     if LC_CODE_SIGNATURE not in commands:
