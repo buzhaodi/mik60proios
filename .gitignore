@@ -22,12 +22,12 @@ vendor_boot.img
 boot.img.orig
 *.tgz
 
-# ---- 上游仓库克隆（各自的版权与许可）----
-UniXNU/
-UniXNU-sheng/
-UniXNU-vermeer/
-UniXNU-sm8550-common/
-uefi-vermeer/
+# ---- 上游仓库克隆（各自的版权与许可；根级锚定，不影响 vendor/UniXNU/ 仓内正式副本）----
+/UniXNU/
+/UniXNU-sheng/
+/UniXNU-vermeer/
+/UniXNU-sm8550-common/
+/uefi-vermeer/
 
 # WSL 镜像副本
 wsl-copy/
