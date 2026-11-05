@@ -833,6 +833,29 @@ Boot (
   DEBUG ((DEBUG_ERROR, "ID_AA64MMFR0_EL1 0x%lx  (PARange %lu, 4 KiB granule %a)\n", READ_SYSREG (id_aa64mmfr0_el1),
           READ_SYSREG (id_aa64mmfr0_el1) & 0xF, (((READ_SYSREG (id_aa64mmfr0_el1) >> 28) & 0xF) == 0xF) ? "NOT supported" : "supported"));
   DEBUG ((DEBUG_ERROR, "ID_AA64PFR0_EL1  0x%lx\n", READ_SYSREG (id_aa64pfr0_el1)));
+  //
+  // socrates (2026-11-05): the stock ABL leaves the TZ secure watchdog
+  // armed and nothing on this side (kernel or firmware) ever pets it, so a
+  // long-enough run resets the phone - the "PID 1 is alive, then it
+  // reboots" behaviour of the first live-userland round. Fire the HLOS-side
+  // disable that Android kernels use for the same purpose
+  // (QcomPkg scm_sip_interface.h: TZ_SECURE_WDOG_DISABLE, SMC 0x02000107,
+  // param_id 0x00000001, one VAL argument: 0 = disable). The QcomPkg
+  // ScmProtocol driver is not part of this firmware's FD, so the SMC goes
+  // out directly. TZ documents the call as a NOP when debug functionality
+  // is disabled; report the return code on the screen and keep booting
+  // regardless - the watchdog theory is then wrong, not the boot.
+  //
+  {
+    register UINT64 SmcId   __asm__ ("x0") = 0x02000107;
+    register UINT64 ParamId __asm__ ("x1") = 0x00000001;
+    register UINT64 Disable __asm__ ("x2") = 0;
+    __asm__ volatile ("smc #0"
+                      : "+r" (SmcId)
+                      : "r" (ParamId), "r" (Disable)
+                      : "x3", "x4", "x5", "x6", "x7", "memory");
+    DEBUG ((DEBUG_ERROR, "TZ_SECURE_WDOG_DISABLE (0x02000107): 0x%lx\n", SmcId));
+  }
   DEBUG ((DEBUG_ERROR, "\nExiting boot services. A green bar across the top\nmarks the loader handoff before the kernel branch.\n"));
   for (Attempt = 0; Attempt < 3; Attempt++) {
     MapSize = Capacity;
