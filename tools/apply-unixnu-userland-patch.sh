@@ -16,11 +16,14 @@
 # Idempotent: a second run on an already patched checkout is a no-op.
 # Usage: bash apply-unixnu-userland-patch.sh /path/to/UniXNU
 set -e
+# Resolve this script's directory before any cd: a relative $0 must not break
+# once we have cd'd into the target checkout.
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 R="${1:?usage: apply-unixnu-userland-patch.sh /path/to/UniXNU}"
 cd "$R"
 test -f unixnu && test -d scripts/unixnu || { echo "$R is not a UniXNU checkout" >&2; exit 1; }
 
-PATCH="$(cd "$(dirname "$0")" && pwd)/unixnu-userland-payload.patch"
+PATCH="$SELF_DIR/unixnu-userland-payload.patch"
 test -f "$PATCH" || { echo "patch not found: $PATCH" >&2; exit 1; }
 
 if git apply --check "$PATCH" 2>/dev/null; then

@@ -20,11 +20,14 @@
 # Idempotent: a second run on an already patched checkout is a no-op.
 # Usage: bash apply-darwinboot-socrates-patch.sh /path/to/UniXNU/drivers/DarwinBoot
 set -e
+# Resolve this script's directory before any cd: a relative $0 must not break
+# once we have cd'd into the target checkout.
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 R="${1:?usage: apply-darwinboot-socrates-patch.sh /path/to/UniXNU/drivers/DarwinBoot}"
 cd "$R"
 test -f DarwinBootPkg/Driver/DarwinBoot.c || { echo "$R is not a DarwinBoot checkout" >&2; exit 1; }
 
-PATCH="$(cd "$(dirname "$0")" && pwd)/darwinboot-socrates-diag.patch"
+PATCH="$SELF_DIR/darwinboot-socrates-diag.patch"
 test -f "$PATCH" || { echo "patch not found: $PATCH" >&2; exit 1; }
 
 # Written against the submodule revision the feeds fetched on 2026-11-03.
