@@ -44,13 +44,15 @@ export LC_ALL=C
 # socrates PMGR: restore the sheng_pmgr_run block to its patched position
 # before the series re-applies (see scripts/mgr-call-site.py).
 python3 scripts/mgr-call-site.py restore
-# The kit patches are the newest layers and reverse FIRST. The fork trace is
-# newer than the exec trace (they share no files, but the ordering keeps the
-# layers readable). The exec trace patch is written against the post-zzz state
-# (its kern_exec.c hunk sits between zzz's "load_machfile returned" stamp and
-# the lret check), so with it still applied, zzz-boot-progress cannot reverse
-# and the whole series loses idempotence.
-for LATE_PATCH in "$ROOT/kits/socrates/patches/xnu-fork-trace.patch" "$ROOT/kits/socrates/patches/xnu-exec-trace.patch" "$ROOT/patches/xnu/zzz-boot-progress.patch" "$ROOT/patches/xnu/zzyc-owner-skip-launch-constraints.patch" \
+# The kit patches are the newest layers and reverse FIRST, newest to oldest:
+# console-2x (video_console.c), then fork-trace (kern_fork.c/kern_exit.c), then
+# exec-trace (kern_exec.c/mach_loader.c/sleh.c/ux_exception.c). No two of them
+# share a file, so only the order against zzz matters below. The exec trace
+# patch is written against the post-zzz state (its kern_exec.c hunk sits
+# between zzz's "load_machfile returned" stamp and the lret check), so with it
+# still applied, zzz-boot-progress cannot reverse and the whole series loses
+# idempotence.
+for LATE_PATCH in "$ROOT/kits/socrates/patches/xnu-console-2x.patch" "$ROOT/kits/socrates/patches/xnu-fork-trace.patch" "$ROOT/kits/socrates/patches/xnu-exec-trace.patch" "$ROOT/patches/xnu/zzz-boot-progress.patch" "$ROOT/patches/xnu/zzyc-owner-skip-launch-constraints.patch" \
     "$ROOT/patches/xnu/zzyb-native-cryptex-os-view.patch" "$ROOT/patches/xnu/zzy-staged-system-apps.patch" \
     "$ROOT/patches/xnu/zzy-native-gpu-addon-mount.patch"; do
   if git -C .cache/xnu-work apply --reverse --check "$LATE_PATCH" >/dev/null 2>&1; then

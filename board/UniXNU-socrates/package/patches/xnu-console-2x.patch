@@ -1,0 +1,160 @@
+diff --git a/osfmk/console/video_console.c b/osfmk/console/video_console.c
+index e62ece1..511e76a 100644
+--- a/osfmk/console/video_console.c
++++ b/osfmk/console/video_console.c
+@@ -111,6 +111,21 @@
+ 
+ #include "sys/msgbuf.h"
+ 
++/*
++ * socrates console 2x (2026-11-06): the panel is 1440x3200 and the stock
++ * 8x16 iso font is unreadable at that pixel density - by eye and by photo
++ * OCR alike, and this board has no debug UART, so the text console is the
++ * only diagnostic channel. Every glyph pixel is rendered as a 2x2 block:
++ * the glyph data stays 8x16 (iso_font, vc_render_char), but the CELL the
++ * console sees is doubled. All cell geometry - rows/columns, the paint
++ * origin, the cursor, scrolling, clears - uses the doubled macros below;
++ * only the 32bpp paint path is scaled (that is the only depth this board
++ * hands the kernel: DarwinBootVideoFromGop rejects every other format).
++ */
++#define VC_2X_SCALE     2
++#define VC_CHAR_WIDTH   (ISO_CHAR_WIDTH * VC_2X_SCALE)
++#define VC_CHAR_HEIGHT  (ISO_CHAR_HEIGHT * VC_2X_SCALE)
++
+ /*
+  * Generic Console (Front-End)
+  * ---------------------------
+@@ -1338,7 +1353,7 @@ vc_clear_screen(unsigned int xx, unsigned int yy, unsigned int scrreg_top,
+ 		return;
+ 	}
+ 
+-	linelongs = vinfo.v_rowbytes * (ISO_CHAR_HEIGHT >> 2);
++	linelongs = vinfo.v_rowbytes * (VC_CHAR_HEIGHT >> 2);  /* socrates 2x */
+ 	rowline = vinfo.v_rowscanbytes >> 2;
+ 	rowlongs = vinfo.v_rowbytes >> 2;
+ 
+@@ -1566,8 +1581,8 @@ vc_paint_char_32(unsigned int xx, unsigned int yy, unsigned char ch, int attrs,
+ 		theCharPrevious = NULL;
+ 	}
+ 	where = (uint32_t*)(vinfo.v_baseaddr +
+-	    (yy * ISO_CHAR_HEIGHT * vinfo.v_rowbytes) +
+-	    (xx * ISO_CHAR_WIDTH * 4));
++	    (yy * VC_CHAR_HEIGHT * vinfo.v_rowbytes) +
++	    (xx * VC_CHAR_WIDTH * 4));
+ 
+ 	if (!attrs) {
+ 		for (i = 0; i < ISO_CHAR_HEIGHT; i++) {         /* No attrs ? FLY ! */
+@@ -1578,12 +1593,21 @@ vc_paint_char_32(unsigned int xx, unsigned int yy, unsigned char ch, int attrs,
+ 				if (theCharPrevious == NULL || val != *theCharPrevious++) {
+ 					val = (vc_color_back & ~val) | (vc_color_fore & val);
+ 					*store++ = val;
++					*store++ = val;      /* socrates 2x: pixel pair */
+ 				} else {
+-					store++;
++					store += 2;          /* socrates 2x: skip the pair */
++				}
++			}
++			/* socrates 2x: same glyph line one fb row down */
++			{
++				uint32_t *below = (uint32_t *)((unsigned char *)where + vinfo.v_rowbytes);
++				int x;
++				for (x = 0; x < 2 * 8; x++) {
++					below[x] = where[x];
+ 				}
+ 			}
+ 
+-			where = (uint32_t *)(((unsigned char*)where) + vinfo.v_rowbytes);
++			where = (uint32_t *)(((unsigned char*)where) + 2 * vinfo.v_rowbytes);
+ 		}
+ 	} else {
+ 		for (i = 0; i < ISO_CHAR_HEIGHT; i++) { /* a little slower */
+@@ -1605,10 +1629,19 @@ vc_paint_char_32(unsigned int xx, unsigned int yy, unsigned char ch, int attrs,
+ 
+ 				val = (vc_color_back & ~val) | (vc_color_fore & val);
+ 				*store++ = val;
++				*store++ = val;          /* socrates 2x: pixel pair */
+ 				lastpixel = save;
+ 			}
++			/* socrates 2x: same glyph line one fb row down */
++			{
++				uint32_t *below = (uint32_t *)((unsigned char *)where + vinfo.v_rowbytes);
++				int x;
++				for (x = 0; x < 2 * 8; x++) {
++					below[x] = where[x];
++				}
++			}
+ 
+-			where = (uint32_t*)(((unsigned char*)where) + vinfo.v_rowbytes);
++			where = (uint32_t*)(((unsigned char*)where) + 2 * vinfo.v_rowbytes);
+ 		}
+ 	}
+ }
+@@ -1710,9 +1743,9 @@ vc_reverse_cursor(unsigned int xx, unsigned int yy)
+ 	}
+ 
+ 	where = (uint32_t*)(vinfo.v_baseaddr +
+-	    (yy * ISO_CHAR_HEIGHT * vinfo.v_rowbytes) +
+-	    (xx /** ISO_CHAR_WIDTH*/ * vinfo.v_depth));
+-	for (line = 0; line < ISO_CHAR_HEIGHT; line++) {
++	    (yy * VC_CHAR_HEIGHT * vinfo.v_rowbytes) +
++	    (xx * VC_CHAR_WIDTH * (vinfo.v_depth >> 3)));  /* socrates 2x */
++	for (line = 0; line < VC_CHAR_HEIGHT; line++) {
+ 		switch (vinfo.v_depth) {
+ 		case 8:
+ 			where[0] = ~where[0];
+@@ -1724,7 +1757,7 @@ vc_reverse_cursor(unsigned int xx, unsigned int yy)
+ 			}
+ 			break;
+ 		case 32:
+-			for (col = 0; col < 8; col++) {
++			for (col = 0; col < 2 * 8; col++) {  /* socrates 2x */
+ 				where[col] = ~where[col];
+ 			}
+ 			break;
+@@ -1742,7 +1775,7 @@ vc_scroll_down(int num, unsigned int scrreg_top, unsigned int scrreg_bottom)
+ 		return;
+ 	}
+ 
+-	linelongs = vinfo.v_rowbytes * (ISO_CHAR_HEIGHT >> 2);
++	linelongs = vinfo.v_rowbytes * (VC_CHAR_HEIGHT >> 2);  /* socrates 2x */
+ 	rowline = vinfo.v_rowbytes >> 2;
+ 	rowscanline = vinfo.v_rowscanbytes >> 2;
+ 
+@@ -1753,7 +1786,7 @@ vc_scroll_down(int num, unsigned int scrreg_top, unsigned int scrreg_bottom)
+ 	i = (scrreg_bottom - scrreg_top) - num;
+ 
+ 	while (i-- > 0) {
+-		for (line = 0; line < ISO_CHAR_HEIGHT; line++) {
++		for (line = 0; line < VC_CHAR_HEIGHT; line++) {  /* socrates 2x */
+ 			/*
+ 			 * Only copy what is displayed
+ 			 */
+@@ -1776,7 +1809,7 @@ vc_scroll_up(int num, unsigned int scrreg_top, unsigned int scrreg_bottom)
+ 		return;
+ 	}
+ 
+-	linelongs = vinfo.v_rowbytes * (ISO_CHAR_HEIGHT >> 2);
++	linelongs = vinfo.v_rowbytes * (VC_CHAR_HEIGHT >> 2);  /* socrates 2x */
+ 	rowline = vinfo.v_rowbytes >> 2;
+ 	rowscanline = vinfo.v_rowscanbytes >> 2;
+ 
+@@ -1786,7 +1819,7 @@ vc_scroll_up(int num, unsigned int scrreg_top, unsigned int scrreg_bottom)
+ 	i = (scrreg_bottom - scrreg_top) - num;
+ 
+ 	while (i-- > 0) {
+-		for (line = 0; line < ISO_CHAR_HEIGHT; line++) {
++		for (line = 0; line < VC_CHAR_HEIGHT; line++) {  /* socrates 2x */
+ 			/*
+ 			 * Only copy what is displayed
+ 			 */
+@@ -2784,8 +2817,8 @@ gc_pause( boolean_t pause, boolean_t graphics_now )
+ static void
+ vc_initialize(__unused struct vc_info * vinfo_p)
+ {
+-	vinfo.v_rows = vinfo.v_height / ISO_CHAR_HEIGHT;
+-	vinfo.v_columns = vinfo.v_width / ISO_CHAR_WIDTH;
++	vinfo.v_rows = vinfo.v_height / VC_CHAR_HEIGHT;      /* socrates 2x */
++	vinfo.v_columns = vinfo.v_width / VC_CHAR_WIDTH;    /* socrates 2x */
+ 	vinfo.v_rowscanbytes = ((vinfo.v_depth + 7) / 8) * vinfo.v_width;
+ 	vc_uiscale = vinfo.v_scale;
+ 	if (vc_uiscale > kMaxProgressData) {
