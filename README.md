@@ -15,12 +15,17 @@
 | XNU 内核首启到 console（vm_init 完成） | ✅ | 2026-11-04 |
 | AMFI 关卡突破（provider-less ApplePMGRNub 桥） | ✅ | 2026-11-04 |
 | **内核完整引导链直到 `Failed to mount root device`**（无存储阶段的预期终点） | ✅ | 2026-11-04 |
-| **首个 EL0 用户态进程（RAM root：rd=md0 + mockfs）** | 🔶 内核链/挂根/exec 已通，卡在 exec 的 BAD_MACHO（签名校验链），详见 BRINGUP-LOG §8 | 2026-11-05 |
+| **首个 EL0 用户态进程（RAM root：rd=md0 + mockfs）** | ✅ exec 链（BAD_MACHO/SP 对齐）根治，PID 1 常驻，见 §8.8-8.9 | 2026-11-05 |
+| **文字 console 上屏（v_display）+ 2× 大字体** | ✅ 此前"图形启动"模式吞掉一切 printf；现在 -v/init 输出肉眼可读，见 §8.10 | 2026-11-06 |
+| **多进程验证（fork/waitpid + execve 第二进程 + child console）** | ✅ Darwin fork 双返回值 ABI（x1 旗）踩明，`child alive`/收尸/hb 心跳全通 | 2026-11-06 |
 | UFS 存储阶段（"系统装上了"） | ⬜ |  |
 | GPU / 显示 / 触摸 | ⬜ |  |
 
-进度估约 **40%**（以"SpringBoard 桌面跑起来"为 100%）。RAM-root 攻坚战（2026-11-05，7 轮真机）已根治两个大坑
-（256 MiB 窗口挪位、LC_MAIN 需 dyld），战况与下一步清单见 BRINGUP-LOG §8。
+进度估约 **45%**（以"SpringBoard 桌面跑起来"为 100%）。fork/waitpid 战役（2026-11-06，6 轮真机）
+连破三关：文字 console（v_display=1 即 kPEGraphicsMode，printf 从不上屏）、入口复位（脏 TZ 态 +
+加载器 SMC = 秒重启，已拆除）、以及真凶 —— **Darwin 的 fork 返回（pid，x1=身份旗）双值，裸 syscall
+只回 x0 会让孩子把自己当爹（慢速 fork 炸弹）**；内核四探针 + panic 定格全程护航。战况与武器资产见
+BRINGUP-LOG §8.10。
 
 ## 仓库结构
 

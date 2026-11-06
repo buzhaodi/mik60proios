@@ -501,3 +501,119 @@ userland 三件套），WSL/Mac 双路复现（`repro/build-userland-boot.sh` / 
 3. 下一大关按 §8.5-4：AMFI 平台二进制判定已在身后（签名链已过，AMFI 未拦）——
    实际下一关自选：存储阶段（APFS/UFS + Apple 原版 launchd，研究 agent 取证的 sheng 路线）
    或继续深挖自建 userland 的能力清单。
+
+## 8.10 第 10 轮:fork/waitpid 战役 —— 三个新武器、一个被冤枉的 SMC、真凶竟是自家 start.S(2026-11-06)
+
+### 8.10.1 文字 console 之谜:`v_display=1` → kPEGraphicsMode(printf 从不上屏)
+
+§8.9.3 悬置的"待录像确认 banner"一直没等到,反而等来一句关键人证:**"没有字,也不会滚动"** ——
+这块板子上 `-v` 滚屏和 init 输出从来就没上过屏。逐层排查后真相:
+
+- panic 块能读字 = panic 渲染器自带字体(独立路径);
+- 启动菜单能读字 = UEFI ConOut;
+- 色带/齿轮 = 直写像素素材;
+- **唯独内核 console 文字走 `PE_create_console()`**,其判据是 boot_args `Video.v_display`:
+
+```c
+if (PE_state.video.v_display) { kPEGraphicsMode } else { kPETextMode }
+```
+
+DarwinBoot 的 `DarwinBootVideoFromGop` 把 `Video[1]` 硬编码为 1("图形启动")= 苹果真机
+"logo+圈、无文字"模式;`-v` 的 printf 全部进缓冲不绘制。**修复:`Video[1] = 0`**(BootVideo.h),
+arm64 上该字段唯一消费者就是这一处分支,零副作用。首刷即见:滚屏、banner、探针全部上屏。
+
+### 8.10.2 入口复位之谜:SMC 在脏 TZ 态下致死(拆除,而非修复)
+
+文字通道打开后,一次偶然的 tripwire panic(故意 exit(7) 逼 panic 定格,`proc_should_trigger_panic`
+对 initproc 恒真)让手机进了复位循环:大字交接页停在 `ID_AA64PFR0`,下一句语句正是昨天加的
+`TZ_SECURE_WDOG_DISABLE` SMC —— **TZ 返回码那行从未出现过**,且完整 Android 引导(ABL/PMIC
+清态法)治不好 → **脏 TZ 态 + 我们这条 SMC = 入口复位**。拆除 SMC(DarwinBoot.c 注释保留全案卷),
+看门狗本就未再咬(v1.2b 冻屏 127s+ 不复位)。教训入册:**加载器路径上不放无后备的 SMC**。
+
+### 8.10.3 武器一:console 2× 字体(`xnu-console-2x.patch`)
+
+用户判词:"字太小,必须弄大"。内核 console 字体固定 8×16(iso_font 内置,无缩放开关),
+1440×3200 面板下肉眼与拍照 OCR 双双不可读。补丁:字形数据不动,**32bpp 绘制路径每个字形像素
+画 2×2 方块**,单元格几何(行列数、原点、光标、滚动、清屏)全部随 `VC_CHAR_*` 宏加倍。
+90 列 × 100 行,肉眼可读、拍照必 OCR(本章全部证据照片皆 2× 字体版)。
+
+### 8.10.4 武器二:fork 四探针(`xnu-fork-trace.patch`,printf 直上 console)
+
+v1.2 的 panic 定格(全零 FAULT/SIG)只证明"child 从未进用户态";用户态 S/L 判决给出更怪的组合:
+`ECHILD + kill(pid,0)=0 + wait4(-1)=0`。四个 printf 探针上内核(console 通道已通,不必等 panic):
+
+| 探针 | 位置 | 回答 |
+| --- | --- | --- |
+| `[fork] link %d to %d (in_exec %d, cnt %d)` | cloneproc 挂链后 | 真实 pid、挂在谁、链长 |
+| `[fork] create %d from %d` | fork() 包装 | 内核视角的调用者 |
+| `[exit] %d rv %d` | exit 系统调用 | child 跑没跑到 exit |
+| `[wait4] want %d, %d children: …` | ECHILD 路径 | 整条链上的 pid+shadow 标记 |
+
+### 8.10.5 真凶:Darwin fork 双返回值 ABI —— 我们的 `_syscall_raw` 只回传 x0
+
+2× 字体版首刷即中(email 证据照片可逐字 OCR):
+
+```
+[fork] create 2 from 1 / link 2 to 1 (in_exec 0, cnt 1)   ← fork/挂链全正常
+[wait4] want 2, 0 children:                                ← 这行是 pid 2 打的!
+[fork] S pid=2 w4=-10 k0=0                                 ← 同上
+[fork] create 3 from 2 / link 3 to 2                       ← L 轮竟是 pid 2 fork 的?!
+[fork] create 4 from 3 / 5 from 3 / 6 from 4 / 8 from 2 …   ← 滚雪球:每个 child 以"父亲"身份重跑整个 supervisor
+```
+
+**每个 fork child 拿到"自己的 pid"当返回值 → `pid==0` 永不成立 → child 全走父路径 → 慢速
+fork 炸弹**(同时解释 11-05 的"uptime 0 打了三次":三个复制 supervisor 各打一遍 banner;
+也解释 PID 1 自己的 `w4=0` 判决:孩子活着,忙着当爹)。
+
+内核源码定位(`thread_set_child`,osfmk/arm64/status.c):
+
+```c
+set_user_saved_state_reg(child_state, 0, pid);   // child 的 x0 = 自己的 pid!
+set_user_saved_state_reg(child_state, 1, 1ULL);  // child 的 x1 = 1(身份旗)
+```
+
+配合 kern_fork.c 父侧的 `retval[1] = 0; /* flag parent return for user space */` ——
+**Darwin 的 fork ABI 是双返回值:(x0=pid, x1=父0/子1),身份在 x1,不在 x0**。libSystem 查
+x1;我们的 freestanding `_syscall_raw` 只回传 x0。此路径在真 Apple 用户态几乎无人踩
+(launchd 用 posix_spawn 走 CLONEPROC_SPAWN 换映像路径,不碰裸 fork 的返回帧),平板先例亦未暴露。
+
+### 8.10.6 修复与 🎉 验收 PASS
+
+`_syscall_fork`(start.S):svc 后查 x1 —— 1 则上报 0(child),否则上报 pid(parent)。纯用户态 10 行汇编。
+
+上机验收(v1.3,bootimg `3f2a68f5`,大字体屏,照片逐行可 OCR):
+
+```
+[fork] create 2 from 1 / link 2 to 1          ← 层级正确
+[exit] 2 rv 43                                 ← S child 跑到 exit
+[fork] S pid=2 w4=2 …                          ← (S/L 同构)
+[fork] child alive: pid=3 ppid=1               ← child 说话(inherited console fd)
+[exit] 3 rv 42
+[fork] L pid=3 w4=3 st=0x2a00 k0=-3            ← 收尸成功:w4=pid,st=exit42<<8,k0=ESRCH
+[init] entry pid=4 argc=2 argv1=hb             ← spawn 的 fork+execve 全通(二代进程!)
+[hb] pid=4, ticking every 10 s → tick 1,2,3…  ← 第二进程持续存活
+```
+
+**多进程 ✓、fork/wait4/getpid/getppid/exit/kill/execve 家族 ✓、child console 通道 ✓ ——
+原定"fork/waitpid + 第二进程"战役收官**,且免费打通 execve 换映像路线(离 posix_spawn 仅一步)。
+
+### 8.10.7 产物与资产(全部 monorepo)
+
+| 资产 | 位置 |
+| --- | --- |
+| 文字模式交接(v_display=0) | vendor/DarwinBoot BootVideo.h + darwinboot-socrates-diag.patch(三项:色带/窗口/文字模式;SMC 已拆,案卷在注释) |
+| 2× 字体 | `package/patches/xnu-console-2x.patch` |
+| fork 探针 | `package/patches/xnu-fork-trace.patch` |
+| fork ABI 修复 | userland start.S `_syscall_fork` + darwin.h |
+| 诊断 init | userland init.c v1.3(S/L 双轮、kill 探针、supervisor 忙时钟、entry 打点、execve errno) |
+| 三层 kit 补丁反转序 | build-xnu-4k-baseline.sh(console-2x → fork-trace → exec-trace → zzz…) |
+
+上机镜像:boot.img `3f2a68f409fd41f5`(72,040,448 B;FD `767fc021` 无 SMC;
+内核 `16286655`→payload `59ee91ae`;userland cdhash `8b1a8975`)。
+测试协议依旧:**每次 fastboot boot 前完整进一次 Android**;SMC 拆除后脏态清法已验证有效。
+
+### 8.10.8 下一步
+
+1. userland 能力清单继续(cs op / mach port / 更广 sysctl,`ps` 真数据);
+2. `posix_spawn` 路线(CLD 两组件)—— execve 已通,离真正的服务管理器一步之遥;
+3. 大关按 §8.5-4:存储阶段(APFS/UFS + Apple 原版 launchd,sheng 案卷路线)。
