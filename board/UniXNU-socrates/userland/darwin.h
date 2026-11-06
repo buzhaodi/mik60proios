@@ -102,9 +102,13 @@ struct sysinfo_vals {
 };
 
 extern long syscall_raw(long number, long a, long b, long c, long d, long e, long f);
+/* fork is special: Darwin's ABI returns (pid, is_child) in (x0, x1) - see
+ * start.S _syscall_fork. Using syscall_raw here made every child see its own
+ * pid and run the whole program again (2026-11-06 first-flash evidence). */
+extern long syscall_fork(void);
 
 static inline long sys_exit(int code)              { return syscall_raw(SYS_exit, code, 0, 0, 0, 0, 0); }
-static inline long sys_fork(void)                  { return syscall_raw(SYS_fork, 0, 0, 0, 0, 0, 0); }
+static inline long sys_fork(void)                  { return syscall_fork(); }
 static inline long sys_read(int fd, void *b, usize n)  { return syscall_raw(SYS_read, fd, (long)b, n, 0, 0, 0); }
 static inline long sys_write(int fd, const void *b, usize n) { return syscall_raw(SYS_write, fd, (long)b, n, 0, 0, 0); }
 static inline long sys_open(const char *p, int f, int m) { return syscall_raw(SYS_open, (long)p, f, m, 0, 0, 0); }

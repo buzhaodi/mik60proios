@@ -47,7 +47,7 @@ void con_write(const char *s, usize n);
 int console_open(void);
 void halt_forever(void);
 
-#define VERSION "1.2b"
+#define VERSION "1.3"
 #define BANNER_WIDTH 62
 
 /* Where the kernel looks for init. mockfs aliases sbin, usr and lib to the root

@@ -14,6 +14,7 @@
     .text
     .globl  _start
     .globl  _syscall_raw
+    .globl  _syscall_fork
     .p2align 2
 
 // void _start(void)
@@ -49,6 +50,33 @@ _syscall_raw:
     mov     x5, x6
     svc     #0x80
     b.cs    2f
+    ret
+2:  neg     x0, x0                  // carry set: x0 holds errno, return -errno
+    ret
+
+// long _syscall_fork(void)
+//
+// Darwin's fork returns TWO values to user space: x0 = the new pid (BOTH
+// sides get the same number) and x1 = the identity flag - 1 in the child,
+// 0 in the parent. thread_set_child (osfmk/arm64/status.c) writes
+// x0 = pid, x1 = 1 straight into the child's saved exception state, and
+// the parent's wrapper sets retval[1] = 0 "flag parent return for user
+// space" (bsd/kern/kern_fork.c). libSystem's fork consults the flag; a
+// freestanding client must do the same. _syscall_raw returns x0 only, so
+// with it every child saw its own pid, believed it was the parent, and ran
+// the whole program again - first-flash evidence 2026-11-06: kernel probes
+// logged "create 3 from 2", "link 8 to 2" as each child re-forked its own
+// copy of the supervisor (and the earlier "uptime 0 printed three times"
+// was three duplicate supervisors each printing the banner).
+_syscall_fork:
+    mov     x16, #2                 // SYS_fork
+    mov     x0, #0
+    mov     x1, #0
+    svc     #0x80
+    b.cs    2f
+    cbnz    x1, 1f
+    ret                             // parent: x0 = child pid
+1:  mov     x0, #0                  // child: x1 flag set, report 0
     ret
 2:  neg     x0, x0                  // carry set: x0 holds errno, return -errno
     ret
