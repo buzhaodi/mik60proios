@@ -15,9 +15,12 @@
 // ------------
 //   PID 1 supervises. It prints a boot report from sysctl, proves that the VM
 //   can give EL0 anonymous memory, reads the root device back through mockfs,
-//   then forks a shell and a heartbeat and reaps them forever. The shell runs
-//   builtins against what mockfs exposes; the heartbeat proves that the timer,
-//   the scheduler and preemption keep working while PID 1 sleeps in wait4().
+//   then proves the process model itself before anything fancy: fork() a child
+//   that prints "child alive" through the inherited console fd and exits with a
+//   distinctive status, and reap it with wait4(). Only then does it fork a shell
+//   and a heartbeat and reap them forever. The shell runs builtins against what
+//   mockfs exposes; the heartbeat proves that the timer, the scheduler and
+//   preemption keep working while PID 1 sleeps in wait4().
 //
 // What it does not do yet
 // -----------------------
@@ -44,7 +47,7 @@ void con_write(const char *s, usize n);
 int console_open(void);
 void halt_forever(void);
 
-#define VERSION "1.0"
+#define VERSION "1.2b"
 #define BANNER_WIDTH 62
 
 /* Where the kernel looks for init. mockfs aliases sbin, usr and lib to the root
@@ -191,6 +194,80 @@ static void probe_data_file(void)
 			con_puts("\n");
 		}
 	}
+}
+
+/* ---- the multi-process proof --------------------------------------------- */
+
+/* wait4 with a deadline. A blocking wait4 that never returns would freeze the
+ * whole boot report, so poll WNOHANG until the deadline passes instead.
+ * Returns the last wait4 answer verbatim: pid on a successful reap, a negative
+ * errno on failure, 0 if the child is still alive at the deadline. */
+static long timed_wait4(long pid, int *status, i64 ms)
+{
+	struct timeval32 t0 = { 0, 0 };
+	sys_gettimeofday(&t0);
+
+	for (;;) {
+		int  st = 0;
+		long got = sys_wait4(pid, &st, WNOHANG, NULL);
+
+		if (got != 0) {
+			if (status) {
+				*status = st;
+			}
+			return got;
+		}
+		struct timeval32 now = { 0, 0 };
+		sys_gettimeofday(&now);
+		if ((now.tv_sec - t0.tv_sec) * 1000
+		    + (now.tv_usec - t0.tv_usec) / 1000 >= ms) {
+			return 0;
+		}
+	}
+}
+
+/* The 2026-11-06 flash (v1.1): fork assigned pid 2 but the child's "child
+ * alive" never appeared, and the parent's wait4(2) came back ECHILD - the
+ * child vanished kernel-side without ever running user code. So this proof is
+ * now two rounds that isolate one variable each:
+ *   S: the child exits 43 WITHOUT printing - fork, exit and the zombie path
+ *      alone (reaped: st=0x2b00, w4=pid; ECHILD: the child never became a
+ *      waitable zombie).
+ *   L: the child prints "child alive" through the inherited console fd first,
+ *      then exits 42 - adds the write syscall and the console lock to the mix.
+ * Both parents print the raw kernel answers verbatim so the screen can be
+ * typed back: k0 is kill(pid, 0), 0 = the pid still exists, -3 = ESRCH, gone. */
+static void prove_fork_wait(void)
+{
+	long pid, w4, k0;
+	int  st = 0;
+
+	pid = sys_fork();
+	if (pid < 0) {
+		printf("[fork] fork() failed: %ld\n", pid);
+		return;
+	}
+	if (pid == 0) {
+		sys_exit(43);
+	}
+	w4 = timed_wait4(pid, &st, 3000);
+	k0 = sys_kill(pid, 0, 0);
+	printf("[fork] S pid=%ld w4=%ld st=0x%x k0=%ld\n", pid, w4, (u64)(u32)st, k0);
+
+	pid = sys_fork();
+	if (pid < 0) {
+		printf("[fork] fork() failed: %ld\n", pid);
+		return;
+	}
+	if (pid == 0) {
+		printf("[fork] child alive: pid=%ld ppid=%ld\n",
+		       sys_getpid(), sys_getppid());
+		sys_exit(42);
+	}
+	st = 0;
+	w4 = timed_wait4(pid, &st, 3000);
+	k0 = sys_kill(pid, 0, 0);
+	printf("[fork] L pid=%ld w4=%ld st=0x%x k0=%ld\n", pid, w4, (u64)(u32)st, k0);
 }
 
 /* ---- shell ------------------------------------------------------------- */
@@ -375,9 +452,11 @@ static void role_shell(void)
 
 static void role_heartbeat(void)
 {
-	printf("[hb]   pid=%ld, ticking once a second\n", sys_getpid());
+	u64 ticks = 0;
+	printf("[hb]   pid=%ld, ticking every 10 s\n", sys_getpid());
 	for (;;) {
-		sys_nanosleep(1, 0);
+		sys_nanosleep(10, 0);
+		printf("[hb]   tick %lu, uptime %ld s\n", ++ticks, uptime_seconds());
 	}
 }
 
@@ -399,9 +478,13 @@ static int spawn(const char *role)
 	argv[2] = NULL;
 	envp[0] = (char *)"PATH=/usr/bin:/bin:/sbin";
 	envp[1] = NULL;
-	sys_execve(init_path, argv, envp);
+	long ret = sys_execve(init_path, argv, envp);
 
-	/* Exec refused: still honour the role rather than die silently. */
+	/* Exec refused: still honour the role rather than die silently. The errno
+	 * makes this legible on screen: a fresh "[hb]/[sh] pid=N" line without it
+	 * means the exec worked; this line means the exec was refused and the
+	 * forked child is running the role in-process. */
+	printf("[fork] execve refused: %ld - running the %s role in-process\n", ret, role);
 	if (!strcmp(role, "sh")) {
 		role_shell();
 	} else {
@@ -433,6 +516,8 @@ static void role_supervisor(void)
 	probe_root_device();
 	probe_data_file();
 
+	prove_fork_wait();
+
 	con_puts("[init] starting services\n");
 	tasks[0].pid = spawn("hb"); tasks[0].name = "hb"; task_count = 1;
 	printf("[init] hb    -> pid %d\n", tasks[0].pid);
@@ -443,21 +528,40 @@ static void role_supervisor(void)
 	con_puts("[init] supervising: wait4() forever, respawning anything that exits\n");
 	printf("[init] ready. uptime %ld s\n", uptime_seconds());
 
+	/* The 2026-11-06 flash: children forked (pids assigned) but no child ever
+	 * printed, and a blocking wait4 hung silently. So this loop trusts nothing
+	 * that could freeze: it polls WNOHANG on its own gettimeofday clock (no
+	 * nanosleep - a broken timer cannot hide here) and prints one line every
+	 * 5 s. The boot CPU is proven alive; if these lines stop, the freeze is
+	 * the supervisor itself. hb/sh are kill(pid, 0) probes of the services:
+	 * 0 = the child exists and is stuck somewhere, -3 = it is gone.
+	 *
+	 * The v1.2 tripwire (init exited at 60 s to force a panic that dumped the
+	 * fault record) is retired in v1.2b: the dump was collected - every slot
+	 * zero, the children never fault - so the panic now buys nothing, while
+	 * each deliberate kernel crash leaves the ABL/PMIC pollution that makes
+	 * the NEXT flash a silent entry reset. With no tripwire this console
+	 * stays up indefinitely: transcribe at leisure. */
 	for (;;) {
-		int status = 0;
-		long pid = sys_wait4(-1, &status, 0, NULL);
-
-		if (pid <= 0) {
-			sys_nanosleep(1, 0);
-			continue;
+		i64 next = uptime_seconds() + 5;
+		while (uptime_seconds() < next) {
+			/* busy wait by design */
 		}
-		for (int i = 0; i < task_count; i++) {
-			if (tasks[i].pid == (int)pid) {
-				printf("[init] %s (pid %ld) exited, status 0x%x; respawning\n",
-				       tasks[i].name, pid, (u64)(u32)status);
-				sys_nanosleep(1, 0);
-				tasks[i].pid = spawn(tasks[i].name);
-				printf("[init] %s -> pid %d\n", tasks[i].name, tasks[i].pid);
+		int  st = 0;
+		long pid = sys_wait4(-1, &st, WNOHANG, NULL);
+		long hb = (task_count > 0 && tasks[0].pid > 0) ? sys_kill(tasks[0].pid, 0, 0) : 0;
+		long sh = (task_count > 1 && tasks[1].pid > 0) ? sys_kill(tasks[1].pid, 0, 0) : 0;
+		printf("[init] alive %ld s w4=%ld hb=%ld sh=%ld\n",
+		       uptime_seconds(), pid, hb, sh);
+
+		if (pid > 0) {
+			for (int i = 0; i < task_count; i++) {
+				if (tasks[i].pid == (int)pid) {
+					printf("[init] %s (pid %ld) exited, status 0x%x; respawning\n",
+					       tasks[i].name, pid, (u64)(u32)st);
+					tasks[i].pid = spawn(tasks[i].name);
+					printf("[init] %s -> pid %d\n", tasks[i].name, tasks[i].pid);
+				}
 			}
 		}
 	}
@@ -471,8 +575,13 @@ void entry(u64 *stack)
 	int    argc = (int)stack[0];
 	char **argv = (char **)&stack[1];
 
-	(void)argc;
 	console_open();
+	/* Every run of this image announces its argv: PID 1 arrives with argc=1
+	 * from the kernel's exec, the hb/sh services arrive here again through
+	 * spawn()'s execve with argv[1] set, and an unexpected re-exec of PID 1
+	 * would show up as repeated argc=1 lines. */
+	printf("[init] entry pid=%ld argc=%ld argv1=%s\n",
+	       sys_getpid(), (i64)argc, argv[1] ? argv[1] : "-");
 	/* A role started by exec is a new process; its uptime starts here. */
 	if (boot_time.tv_sec == 0) {
 		boot_time.tv_sec = now_seconds();

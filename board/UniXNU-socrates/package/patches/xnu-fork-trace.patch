@@ -1,0 +1,51 @@
+diff --git a/bsd/kern/kern_exit.c b/bsd/kern/kern_exit.c
+index 760c339..42a2281 100644
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -1462,6 +1462,7 @@ __attribute__((noreturn))
+ void
+ exit(proc_t p, struct exit_args *uap, int *retval)
+ {
++	printf("[exit] %d rv %d\n", proc_getpid(p), uap->rval);
+ 	p->p_xhighbits = ((uint32_t)(uap->rval) & 0xFF000000) >> 24;
+ 	exit1(p, W_EXITCODE((uint32_t)uap->rval, 0), retval);
+ 
+@@ -3069,6 +3070,17 @@ loop1:
+ 	}
+ 	/* list lock is held when we get here any which way */
+ 	if (nfound == 0) {
++		/* socrates fork diagnostics: say what the walk actually saw.
++		 * "S" marks shadow procs, which wait4 skips on sight. */
++		printf("[wait4] want %d, %d children:", uap->pid, q->p_childrencnt);
++		{
++			proc_t cp;
++			PCHILDREN_FOREACH(q, cp) {
++				printf(" %d%s", proc_getpid(cp),
++				    proc_is_shadow(cp) ? "S" : "");
++			}
++		}
++		printf("\n");
+ 		proc_list_unlock();
+ 		return ECHILD;
+ 	}
+diff --git a/bsd/kern/kern_fork.c b/bsd/kern/kern_fork.c
+index 5201d84..c3a240f 100644
+--- a/bsd/kern/kern_fork.c
++++ b/bsd/kern/kern_fork.c
+@@ -582,6 +582,7 @@ fork(proc_t parent_proc, __unused struct fork_args *uap, int32_t *retval)
+ 		/* Return to the parent */
+ 		child_proc = (proc_t)get_bsdthreadtask_info(child_thread);
+ 		retval[0] = proc_getpid(child_proc);
++		printf("[fork] create %d from %d\n", retval[0], proc_getpid(parent_proc));
+ 
+ 		child_task = (task_t)get_threadtask(child_thread);
+ 		assert(child_task != TASK_NULL);
+@@ -744,6 +745,8 @@ cloneproc(task_t parent_task, coalition_t *parent_coalitions, proc_t parent_proc
+ 
+ 	/* make child visible */
+ 	pinsertchild(parent_proc, child_proc, in_exec);
++	printf("[fork] link %d to %d (in_exec %d, cnt %d)\n",
++	    child_proc->p_pid, proc_getpid(parent_proc), in_exec, parent_proc->p_childrencnt);
+ 
+ 	/*
+ 	 * Make child runnable, set start time.

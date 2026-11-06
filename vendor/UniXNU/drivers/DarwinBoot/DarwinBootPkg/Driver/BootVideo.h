@@ -28,7 +28,14 @@ DarwinBootVideoFromGop (CONST EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop, UINT64 Video[6]
       (Gop->Mode->FrameBufferSize < Bytes) ||
       (Gop->Mode->FrameBufferBase > MAX_UINT64 - Gop->Mode->FrameBufferSize)) { return EFI_COMPROMISED_DATA; }
   Video[0] = Gop->Mode->FrameBufferBase;
-  Video[1] = 1;
+  // XNU's PE_create_console reads this field: nonzero = "booter set up graphics
+  // mode" -> kPEGraphicsMode -> logo/progress UI, printf never paints (the mode
+  // a stock iPhone boots in); zero = kPETextMode -> the -v console and every
+  // /dev/console write (the init banner, the fork proof) paint through the
+  // kernel's built-in iso_font. This board has no debug UART, so the text
+  // console IS the diagnostic channel: first-flash evidence 2026-11-06 showed
+  // bands + gear and not one character of console text, because this was 1.
+  Video[1] = 0;
   Video[2] = RowBytes;
   Video[3] = Info->HorizontalResolution;
   Video[4] = Info->VerticalResolution;

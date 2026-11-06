@@ -1,5 +1,25 @@
+diff --git a/DarwinBootPkg/Driver/BootVideo.h b/DarwinBootPkg/Driver/BootVideo.h
+index 2bbb634..841ff3e 100644
+--- a/DarwinBootPkg/Driver/BootVideo.h
++++ b/DarwinBootPkg/Driver/BootVideo.h
+@@ -28,7 +28,14 @@ DarwinBootVideoFromGop (CONST EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop, UINT64 Video[6]
+       (Gop->Mode->FrameBufferSize < Bytes) ||
+       (Gop->Mode->FrameBufferBase > MAX_UINT64 - Gop->Mode->FrameBufferSize)) { return EFI_COMPROMISED_DATA; }
+   Video[0] = Gop->Mode->FrameBufferBase;
+-  Video[1] = 1;
++  // XNU's PE_create_console reads this field: nonzero = "booter set up graphics
++  // mode" -> kPEGraphicsMode -> logo/progress UI, printf never paints (the mode
++  // a stock iPhone boots in); zero = kPETextMode -> the -v console and every
++  // /dev/console write (the init banner, the fork proof) paint through the
++  // kernel's built-in iso_font. This board has no debug UART, so the text
++  // console IS the diagnostic channel: first-flash evidence 2026-11-06 showed
++  // bands + gear and not one character of console text, because this was 1.
++  Video[1] = 0;
+   Video[2] = RowBytes;
+   Video[3] = Info->HorizontalResolution;
+   Video[4] = Info->VerticalResolution;
 diff --git a/DarwinBootPkg/Driver/DarwinBoot.c b/DarwinBootPkg/Driver/DarwinBoot.c
-index 3b6cafc..3066a9f 100644
+index 3b6cafc..5130a82 100644
 --- a/DarwinBootPkg/Driver/DarwinBoot.c
 +++ b/DarwinBootPkg/Driver/DarwinBoot.c
 @@ -490,9 +490,19 @@ DiagDraw (CONST CHAR16 *Text, UINTN Row)
@@ -59,7 +79,7 @@ index 3b6cafc..3066a9f 100644
    if (EFI_ERROR (Status)) { goto Fail; }
    ArgsAddress = ALIGN_VALUE (Address + Kernel.End - Kernel.Base, SIZE_16KB);
    TreeAddress = ArgsAddress + EFI_PAGE_SIZE;
-@@ -804,6 +827,8 @@ Boot (
+@@ -804,10 +827,26 @@ Boot (
            ReadUnaligned32 ((CONST UINT32 *)(UINTN)(Address + Kernel.Entry - Kernel.Base + 4)),
            ReadUnaligned32 ((CONST UINT32 *)(UINTN)(Address + Kernel.Entry - Kernel.Base + 8)),
            ReadUnaligned32 ((CONST UINT32 *)(UINTN)(Address + Kernel.Entry - Kernel.Base + 12))));
@@ -68,6 +88,24 @@ index 3b6cafc..3066a9f 100644
    DEBUG ((DEBUG_ERROR, "CurrentEL %lu  SCTLR_EL1 0x%lx  TCR_EL1 0x%lx\n", DarwinCurrentEl () >> 2, READ_SYSREG (sctlr_el1), READ_SYSREG (tcr_el1)));
    DEBUG ((DEBUG_ERROR, "ID_AA64MMFR0_EL1 0x%lx  (PARange %lu, 4 KiB granule %a)\n", READ_SYSREG (id_aa64mmfr0_el1),
            READ_SYSREG (id_aa64mmfr0_el1) & 0xF, (((READ_SYSREG (id_aa64mmfr0_el1) >> 28) & 0xF) == 0xF) ? "NOT supported" : "supported"));
+   DEBUG ((DEBUG_ERROR, "ID_AA64PFR0_EL1  0x%lx\n", READ_SYSREG (id_aa64pfr0_el1)));
++  //
++  // socrates (2026-11-06, removed): the TZ_SECURE_WDOG_DISABLE SMC
++  // (0x02000107) that used to fire here killed the boot on dirty TZ state.
++  // The same FD booted fine while the phone was clean, but after the
++  // deliberate panic cycles of the fork-diagnostics rounds every boot reset
++  // with this hand-off page ending exactly at the ID_AA64PFR0 line - the
++  // next statement was this SMC, and the TZ return-code line that follows
++  // never once appeared. Full Android boots (the classic ABL/PMIC pollution
++  // cure) did not help, which fits TZ state surviving those resets. The
++  // watchdog the call targeted never fired again anyway: the v1.2 frozen
++  // console sat five minutes with no reset. If the long-run reboot returns,
++  // disable the watchdog kernel-side instead (APSS WDT registers, mapped
++  // early in pexpert) rather than from the loader.
++  //
+   DEBUG ((DEBUG_ERROR, "\nExiting boot services. A green bar across the top\nmarks the loader handoff before the kernel branch.\n"));
+   for (Attempt = 0; Attempt < 3; Attempt++) {
+     MapSize = Capacity;
 diff --git a/DarwinBootPkg/Driver/Entry.S b/DarwinBootPkg/Driver/Entry.S
 index a7a55c2..0cacbef 100644
 --- a/DarwinBootPkg/Driver/Entry.S
